@@ -1,0 +1,325 @@
+diff --git a/data_proc/__pycache__/data_utils.cpython-38.pyc b/data_proc/__pycache__/data_utils.cpython-38.pyc
+index a697b20..7b76ac8 100644
+Binary files a/data_proc/__pycache__/data_utils.cpython-38.pyc and b/data_proc/__pycache__/data_utils.cpython-38.pyc differ
+diff --git a/data_proc/__pycache__/gene_embeddings.cpython-38.pyc b/data_proc/__pycache__/gene_embeddings.cpython-38.pyc
+index 61a5c6d..f3ba19a 100644
+Binary files a/data_proc/__pycache__/gene_embeddings.cpython-38.pyc and b/data_proc/__pycache__/gene_embeddings.cpython-38.pyc differ
+diff --git a/data_proc/data_utils.py b/data_proc/data_utils.py
+index 5706e6b..5b9a58d 100644
+--- a/data_proc/data_utils.py
++++ b/data_proc/data_utils.py
+@@ -107,17 +107,17 @@ def data_to_torch_X(X):
+     if isinstance(X, sc.AnnData):
+         X = X.X
+     if not isinstance(X, np.ndarray):
+-            X = X.toarray()
++        X = X.toarray()
+     return torch.from_numpy(X).float()
+ 
+ 
+ def anndata_to_sc_dataset(adata:sc.AnnData, 
+-                                 species:str="human", 
+-                                 labels:list=[],
+-                                 covar_col:str=None,
+-                                 hv_genes=None,
+-                                 embedding_model="ESM2",
+-                                ) -> (SincleCellDataset, AnnData):
++                          species:str="human", 
++                          labels:list=[],
++                          covar_col:str=None,
++                          hv_genes=None,
++                          embedding_model="ESM2",
++                          ) -> (SincleCellDataset, AnnData):
+     
+     # Subset to just genes we have embeddings for
+     adata, protein_embeddings = load_gene_embeddings_adata(
+@@ -125,8 +125,8 @@ def anndata_to_sc_dataset(adata:sc.AnnData,
+         species=[species],
+         embedding_model=embedding_model
+     )
+-    
+-    if hv_genes is not None:
++        
++    if hv_genes is not None: #! currently not used 
+         sc.pp.highly_variable_genes(adata, flavor='seurat_v3', n_top_genes=hv_genes)  # Expects Count Data
+     
+         hv_index = adata.var["highly_variable"]
+@@ -135,6 +135,7 @@ def anndata_to_sc_dataset(adata:sc.AnnData,
+         protein_embeddings = protein_embeddings[species][hv_index]
+     else:
+         protein_embeddings = protein_embeddings[species]
++    
+     expression = data_to_torch_X(adata.X)
+     
+     covar_vals = None
+@@ -145,6 +146,7 @@ def anndata_to_sc_dataset(adata:sc.AnnData,
+         if covar_col is not None:
+             # we have a categorical label to use as covariate
+             covar_vals = torch.tensor(pd.Categorical(adata.obs[covar_col]).codes)
++            
+     return SincleCellDataset(
+         expression=expression,
+         protein_embeddings=protein_embeddings,
+@@ -171,7 +173,7 @@ def adata_path_to_prot_chrom_starts(adata, dataset_species, spec_pe_genes, gene_
+ 
+ 
+ def process_raw_anndata(row, h5_folder_path, npz_folder_path, scp, skip,
+-                        additional_filter, root):
++                        additional_filter, root, layer_key, gene_col, data_is_raw):
+         path = row.path
+         if not os.path.isfile(root + "/" + path):
+             print( "**********************************")
+@@ -181,7 +183,7 @@ def process_raw_anndata(row, h5_folder_path, npz_folder_path, scp, skip,
+             return None
+ 
+         name = path.replace(".h5ad", "")
+-        proc_path = path.replace(".h5ad", "_proc.h5ad")
++        proc_path = path.replace(".h5ad", f"_proc_{layer_key}.h5ad")
+         if skip:
+             if os.path.isfile(h5_folder_path + proc_path):
+                 print(f"{name} already processed. Skipping")
+@@ -193,11 +195,20 @@ def process_raw_anndata(row, h5_folder_path, npz_folder_path, scp, skip,
+         covar_col = row.covar_col
+ 
+         ad = sc.read(root + "/" + path)
++        if layer_key == "X":
++            if data_is_raw and ad.raw is not None:
++                ad.X = ad.raw.X.copy()
++                del ad.raw
++        else:
++            ad.X = ad.layers[layer_key].copy()
++        
++        if gene_col in ad.var.columns:
++            ad.var.index = ad.var[gene_col]
++            
+         labels = []
+         if "cell_type" in ad.obs.columns:
+             labels.append("cell_type")
+ 
+-
+         if covar_col is np.nan or np.isnan(covar_col):
+             covar_col = None
+         else:
+@@ -207,7 +218,7 @@ def process_raw_anndata(row, h5_folder_path, npz_folder_path, scp, skip,
+             sc.pp.filter_genes(ad, min_cells=10)
+             sc.pp.filter_cells(ad, min_genes=25)
+ 
+-
++        #? the SingleCellDataset is not unsed
+         dataset, adata = anndata_to_sc_dataset(ad, species=species, labels=labels, covar_col=covar_col, hv_genes=None)
+         adata = adata.copy()
+ 
+diff --git a/data_proc/gene_embeddings.py b/data_proc/gene_embeddings.py
+index e438c66..ba3f093 100644
+--- a/data_proc/gene_embeddings.py
++++ b/data_proc/gene_embeddings.py
+@@ -9,7 +9,7 @@ import numpy as np
+ import pandas as pd
+ 
+ 
+-EMBEDDING_DIR = Path('model_files/protein_embeddings')
++EMBEDDING_DIR = Path('./model_files/protein_embeddings')
+ MODEL_TO_SPECIES_TO_GENE_EMBEDDING_PATH = {
+     'ESM2': {
+         'human': EMBEDDING_DIR / 'Homo_sapiens.GRCh38.gene_symbol_to_embedding_ESM2.pt',
+diff --git a/data_proc/preproc_many_dataset.py b/data_proc/preproc_many_dataset.py
+index 22888dd..5d6b9d6 100644
+--- a/data_proc/preproc_many_dataset.py
++++ b/data_proc/preproc_many_dataset.py
+@@ -141,6 +141,7 @@ def anndata_to_sc_dataset(adata:sc.AnnData,
+         if covar_col is not None:
+             # we have a categorical label to use as covariate
+             covar_vals = torch.tensor(pd.Categorical(adata.obs[covar_col]).codes)
++            
+     return SincleCellDataset(
+         expression=expression,
+         protein_embeddings=protein_embeddings,
+@@ -176,6 +177,7 @@ def proc(args):
+         datasets_df.loc[datasets_df["path"] == k, "num_genes"] = ng
+     # Write with the cells and genes info back to the original path
+     datasets_df.to_csv(args.datasets_df, index=False)
++    
+ if __name__=="__main__":
+     # Parse command-line arguments
+     
+@@ -194,8 +196,6 @@ if __name__=="__main__":
+     
+     parser.add_argument('--DO_HVG', type=bool, default=False, help='Should a HVG subset be done.')
+     
+-    
+-    parse
+     args = parser.parse_args()
+-    main(args)
++    proc(args)
+     
+\ No newline at end of file
+diff --git a/eval_data.py b/eval_data.py
+index 26acb5e..c8d755a 100644
+--- a/eval_data.py
++++ b/eval_data.py
+@@ -47,6 +47,22 @@ class MultiDatasetSentences(data.Dataset):
+         
+         self.npzs_dir = npzs_dir
+ 
++    def check_logged(self, data) -> bool:
++        """
++        Check if the data is already log1p transformed.
++        """
++        max_, min_ = data.max(), data.min()
++        if max_ > 30:
++            return False
++        if min_ < 0:
++            return False
++
++        non_zero_min = data[data > 0].min()
++        if non_zero_min >= 1:
++            return False
++
++        return True
++    
+     def __getitem__(self, idx):
+         if isinstance(idx, int):
+             for dataset in sorted(self.datasets):
+@@ -56,7 +72,16 @@ class MultiDatasetSentences(data.Dataset):
+                     cts = np.memmap(self.npzs_dir + f"{dataset}_counts.npz", dtype='int64', mode='r', shape=self.shapes_dict[dataset])
+                     counts = cts[idx]
+                     counts = torch.tensor(counts).unsqueeze(0)
+-                    weights = torch.log1p(counts)
++                    is_logged = self.check_logged(counts)
++                    if self.args.data_is_raw:
++                        if is_logged:
++                            print(
++                                "Warning: The input data seems to be already log1p transformed. "
++                                "Set `data_is_raw=False` to avoid double log1p transform."
++                            )
++                        weights = torch.log1p(counts)
++                    else:
++                        weights = counts
+                     weights = (weights / torch.sum(weights))
+                     batch_sentences, mask, seq_len, cell_sentences = \
+                         sample_cell_sentences(counts, weights, dataset, self.args,
+diff --git a/eval_single_anndata.py b/eval_single_anndata.py
+index 7931840..7e42f3f 100644
+--- a/eval_single_anndata.py
++++ b/eval_single_anndata.py
+@@ -100,9 +100,14 @@ if __name__ == "__main__":
+                         help='Species of the anndata.')
+     parser.add_argument('--filter', type=bool, default=True,
+                         help='Additional gene/cell filtering on the anndata.')
+-    parser.add_argument('--skip', type=bool, default=True,
+-                        help='Skip datasets that appear to have already been created.')
+-
++    parser.add_argument('--skip', type=int, default=1,
++                        help='Skip datasets that appear to have already been created.')    
++    parser.add_argument('--layer_key', type=str,
++                        default="counts",
++                        help='Where the raw_counts data are saved.')
++    parser.add_argument('--gene_col', type=str, default="feature_name")
++    parser.add_argument('--data_is_raw', type=int, default=1)
++    
+     # Model Arguments
+     parser.add_argument('--model_loc', type=str,
+                         default=None,
+@@ -135,7 +140,8 @@ if __name__ == "__main__":
+                         help='Token dimension.')
+     parser.add_argument('--multi_gpu', type=bool, default=False,
+                         help='Use multiple GPUs')
+-
++    parser.add_argument('--num_workers', type=int, default=-1)
++    
+     # Misc Arguments
+     parser.add_argument("--spec_chrom_csv_path",
+                         default="./model_files/species_chrom.csv", type=str,
+diff --git a/evaluate.py b/evaluate.py
+index d014981..49bd2b8 100644
+--- a/evaluate.py
++++ b/evaluate.py
+@@ -34,7 +34,7 @@ class AnndataProcessor:
+     def __init__(self, args, accelerator):
+         self.args = args
+         self.accelerator = accelerator
+-        self.h5_folder_path = self.args.dir
++        self.h5_folder_path = os.path.dirname(self.args.adata_path) + "/UCE/"
+         self.npz_folder_path = self.args.dir
+         self.scp = ""
+ 
+@@ -45,7 +45,7 @@ class AnndataProcessor:
+         self.adata_name = self.args.adata_path.split("/")[-1]
+         self.adata_root_path = self.args.adata_path.replace(self.adata_name, "")
+         self.name = self.adata_name.replace(".h5ad", "")
+-        self.proc_h5_path = self.h5_folder_path + f"{self.name}_proc.h5ad"
++        self.proc_h5_path = self.h5_folder_path + f"{self.name}_proc_{self.args.layer_key}.h5ad"
+         self.adata = None
+ 
+         # Set up the row
+@@ -86,7 +86,8 @@ class AnndataProcessor:
+             figshare_download(
+                 "https://figshare.com/ndownloader/files/42706576",
+                 self.args.model_loc)
+-
++        if not os.path.exists(self.h5_folder_path):
++            os.makedirs(self.h5_folder_path)
+ 
+     def preprocess_anndata(self):
+         if self.accelerator.is_main_process:
+@@ -97,7 +98,10 @@ class AnndataProcessor:
+                                     self.scp,
+                                     self.args.skip,
+                                     self.args.filter,
+-                                    root=self.adata_root_path)
++                                    root=self.adata_root_path,
++                                    layer_key=self.args.layer_key,
++                                    gene_col=self.args.gene_col,
++                                    data_is_raw=self.args.data_is_raw)
+             if (num_cells is not None) and (num_genes is not None):
+                 self.save_shapes_dict(self.name, num_cells, num_genes,
+                                        self.shapes_dict_path)
+@@ -224,10 +228,14 @@ def run_eval(adata, name, pe_idx_path, chroms_path, starts_path, shapes_dict,
+                                     datasets_to_starts_path=starts_path
+                                     )
+     multi_dataset_sentence_collator = MultiDatasetSentenceCollator(args)
++    
++    num_workers = args.num_workers
++    if num_workers == -1:
++        num_workers = min(len(os.sched_getaffinity(0)), batch_size // 2)
+ 
+     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False,
+                             collate_fn=multi_dataset_sentence_collator,
+-                            num_workers=0)
++                            num_workers=num_workers)
+     dataloader = accelerator.prepare(dataloader)
+     pbar = tqdm(dataloader, disable=not accelerator.is_local_main_process)
+     dataset_embeds = []
+@@ -251,9 +259,12 @@ def run_eval(adata, name, pe_idx_path, chroms_path, starts_path, shapes_dict,
+     accelerator.wait_for_everyone()
+     if accelerator.is_main_process:
+         dataset_embeds = np.vstack(dataset_embeds)
+-        adata.obsm["X_uce"] = dataset_embeds
+-        write_path = args.dir + f"{name}_uce_adata.h5ad"
+-        adata.write(write_path)
+-
+-        print("*****Wrote Anndata to:*****")
+-        print(write_path)
++        # adata.obsm["X_uce"] = dataset_embeds
++        # write_path = args.dir + f"{name}_uce_adata.h5ad"
++        # adata.write(write_path)
++
++        # print("*****Wrote Anndata to:*****")
++        # print(write_path)
++        
++        np.save(os.path.join(args.dir, "cell_emb.npy"), dataset_embeds)
++        
+\ No newline at end of file
+diff --git a/utils.py b/utils.py
+index ca6f292..2df32cf 100644
+--- a/utils.py
++++ b/utils.py
+@@ -96,7 +96,7 @@ def figshare_download(url, save_path):
+                 file.write(data)
+         progress_bar.close()
+ 
+-    # If the downloaded filename ends in tar.gz then extraact it
++    # If the downloaded filename ends in tar.gz then extract it
+     if save_path.endswith(".tar.gz"):
+        with tarfile.open(save_path) as tar:
+             tar.extractall(path=os.path.dirname(save_path))

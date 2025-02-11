@@ -1,0 +1,303 @@
+diff --git a/SCAD/data/split_norm/split_data_SCAD_5fold_norm.py b/SCAD/data/split_norm/split_data_SCAD_5fold_norm.py
+index 2a608d9..53995b6 100644
+--- a/SCAD/data/split_norm/split_data_SCAD_5fold_norm.py
++++ b/SCAD/data/split_norm/split_data_SCAD_5fold_norm.py
+@@ -12,7 +12,7 @@ import pandas as pd
+ 
+ parser = argparse.ArgumentParser(description='Drug_response_pre')
+ parser.add_argument('--emb', type=int, default=0, help='use emb')
+-parser.add_argument('--ckpt_name', type=str, default='50M-0.1B-res', help='ckpt path')
++parser.add_argument('--ckpt_name', type=str, default='0.1B-res', help='ckpt path')
+ parser.add_argument('--drug', type=str, default='Etoposide', help='drug name')
+ 
+ args = parser.parse_args()
+@@ -53,7 +53,6 @@ if args.emb == 1:
+         
+     ## if use solid tumor only
+     if Solid=="True":
+-        
+         raw_source_exprs_resp_z = pd.read_csv('./data/split_norm/Source_solid_exprs_resp_z.' + DRUG + geneset + '.tsv', sep='\t', index_col=0)
+         source_exprs_resp_z = np.load('./data/split_norm/Source_solid_exprs_resp_19264.'+DRUG+"_"+ckpt_name+'_embedding.npy')
+         source_exprs_resp_z = pd.DataFrame(source_exprs_resp_z,index = raw_source_exprs_resp_z.index)
+diff --git a/SCAD/model/SCAD_train_binarized_5folds-pub.py b/SCAD/model/SCAD_train_binarized_5folds-pub.py
+index 20b4d67..4b2bbba 100644
+--- a/SCAD/model/SCAD_train_binarized_5folds-pub.py
++++ b/SCAD/model/SCAD_train_binarized_5folds-pub.py
+@@ -376,7 +376,7 @@ for index, mbsize in enumerate(ls_mb_size):
+                 return 0
+             def transform(self, x):
+                 return x
+-        if emb ==1:
++        if emb == 1:
+             scalerTrain = Naivescaler()
+         else: 
+             scalerTrain = sk.StandardScaler()
+@@ -482,7 +482,7 @@ for index, mbsize in enumerate(ls_mb_size):
+                 Labels = torch.ones(F_xs.size(0), 1)
+                 Labelt = torch.zeros(F_xt.size(0), 1)
+                 Lst = torch.cat([Labels, Labelt],0).to(device)  ## combine domain labels
+-                Xst = torch.cat([F_xs, F_xt], 0).to(device)     ##combine domain data
++                Xst = torch.cat([F_xs, F_xt], 0).to(device)     ## combine domain data
+ 
+                 yhat_DG = DG(Xst)       ##predicted domain label from global discriminator
+                 DG_loss = C_loss(yhat_DG, Lst)
+@@ -556,8 +556,7 @@ for index, mbsize in enumerate(ls_mb_size):
+             #            }, save_best_model_to)
+ 
+         ## Bulk Evaluation
+-        
+-        val_loss, val_auc, val_apr, pred,gt = evaluate_model(XValGDSC_N, TYValGDSC,Gen, Map)
++        val_loss, val_auc, val_apr, pred, gt = evaluate_model(XValGDSC_N, TYValGDSC, Gen, Map)
+         print("Bulk Valid")
+         print("test_apr = {}\n".format(val_apr))
+         print("\n\n-- Test Results --\n\n")
+@@ -579,7 +578,7 @@ for index, mbsize in enumerate(ls_mb_size):
+         print("TXTestCells_N shape: {}\n".format(TXTestCells_N.size()))
+         print("TYTestCells shape: {}\n".format(TYTestCells.size()))
+         save_best_model_to = os.path.join(save_model_to, split + '_best_model.pt')
+-        test_loss, test_auc, test_apr, test_predicted_y,gt = evaluate_model(TXTestCells_N, TYTestCells,Gen, Map)
++        test_loss, test_auc, test_apr, test_predicted_y,gt = evaluate_model(TXTestCells_N, TYTestCells, Gen, Map)
+         print("test_apr = {}\n".format(test_apr))
+         print("\n\n-- Test Results --\n\n")
+         print("test loss: {}".format(test_loss))
+@@ -623,7 +622,5 @@ for index, mbsize in enumerate(ls_mb_size):
+         f.write("Mean: {}\tStandard Deviation: {}\n".format(avgAPR, stdAPR))
+ 
+     with open(tr_ts_summary_path, "a") as f:
+-        f.write(" BULK AUC:{} BULK APR:{} Average Test AUC = {}; Average Test Precision Recall = {};  path = {}\n".format(np.mean(AUCvalbulk_splits_total),np.mean(APRvalbulk_splits_total),avgAUC, avgAPR, test_results_file))
+-        f.close()
+-        ##
+-
++        f.write("BULK AUC:{} BULK APR:{} Average Test AUC = {}; Average Test Precision Recall = {};  path = {}\n".format(np.mean(AUCvalbulk_splits_total),np.mean(APRvalbulk_splits_total),avgAUC, avgAPR, test_results_file))
++        f.close()
+\ No newline at end of file
+diff --git a/SCAD/run_embedding_sc.py b/SCAD/run_embedding_sc.py
+index c48ac3f..89391f5 100644
+--- a/SCAD/run_embedding_sc.py
++++ b/SCAD/run_embedding_sc.py
+@@ -8,7 +8,7 @@ from tqdm import tqdm
+ import os
+ 
+ import sys 
+-sys.path.append("../pretrain/") 
++sys.path.append("../model") 
+ from load import *
+ 
+ ####################################Settings#################################
+@@ -32,7 +32,8 @@ def main():
+     data_r=pd.read_csv(args.data_path,index_col=0)
+     gexpr_feature = data_r
+     print(gexpr_feature.shape)
+-    pretrainmodel,pretrainconfig = load_model_frommmf(args.ckpt_path,device)
++    pretrainmodel,pretrainconfig = load_model_frommmf(args.ckpt_path, key="rde")
++    pretrainmodel.to(device)
+     pretrainmodel.eval()
+     geneexpemb=[]
+     
+diff --git a/apiexample/client.py b/apiexample/client.py
+index 1e1c22b..30078e2 100644
+--- a/apiexample/client.py
++++ b/apiexample/client.py
+@@ -23,7 +23,7 @@ def main_gene_selection(X_df, gene_list):
+     
+     var = pd.DataFrame(index=X_df.columns)
+     var['mask'] = [1 if i in to_fill_columns else 0 for i in list(var.index)]
+-    return X_df, to_fill_columns,var
++    return X_df, to_fill_columns, var
+ 
+ # usage
+ # gene_list_df = pd.read_csv('../OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
+diff --git a/model/get_embedding.py b/model/get_embedding.py
+index 06c8c7c..64dea90 100644
+--- a/model/get_embedding.py
++++ b/model/get_embedding.py
+@@ -2,6 +2,7 @@
+ 
+ import argparse
+ import random,os
++os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:256'
+ import numpy as np
+ import pandas as pd
+ import argparse
+@@ -11,6 +12,7 @@ import scipy.sparse
+ from scipy.sparse import issparse
+ import scanpy as sc
+ from load import *
++import gc
+ 
+ ####################################Settings#################################
+ parser = argparse.ArgumentParser(description='Drug_response_pre')
+@@ -27,12 +29,9 @@ parser.add_argument('--version',  type=str, default='ce', help='only valid for o
+ parser.add_argument('--model_path',  type=str, default='None', help='pre-trained model path')
+ parser.add_argument('--ckpt_name',  type=str, default='01B-resolution', help='checkpoint name')
+ 
+-
+-
+ args = parser.parse_args()
+ 
+ 
+-
+ def main_gene_selection(X_df, gene_list):
+     """
+     Describe:
+@@ -51,11 +50,11 @@ def main_gene_selection(X_df, gene_list):
+     X_df = pd.DataFrame(np.concatenate([df.values for df in [X_df, padding_df]], axis=1), 
+                         index=X_df.index, 
+                         columns=list(X_df.columns) + list(padding_df.columns))
+-    X_df = X_df[gene_list]
++    X_df = X_df[gene_list] #! re-order the genes 
+     
+     var = pd.DataFrame(index=X_df.columns)
+     var['mask'] = [1 if i in to_fill_columns else 0 for i in list(var.index)]
+-    return X_df, to_fill_columns,var
++    return X_df, to_fill_columns, var
+ gene_list_df = pd.read_csv('./OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
+ gene_list = list(gene_list_df['gene_name'])
+ 
+@@ -71,6 +70,7 @@ def main():
+     torch.backends.cudnn.benchmark = False
+     
+     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
++    
+     #Load data
+     if args.data_path[-3:]=='npz':
+         gexpr_feature = scipy.sparse.load_npz(args.data_path)
+@@ -78,7 +78,7 @@ def main():
+     elif args.data_path[-4:]=='h5ad':
+         gexpr_feature = sc.read_h5ad(args.data_path)
+         idx = gexpr_feature.obs_names.tolist()
+-        col = gexpr_feature.var.gene_name.tolist()
++        col = gexpr_feature.var.gene_name.tolist() # var_names
+         if issparse(gexpr_feature.X):
+             gexpr_feature = gexpr_feature.X.toarray()
+         else:
+@@ -97,7 +97,7 @@ def main():
+     
+     if (args.pre_normalized == 'F') and (args.input_type == 'bulk'):
+         adata = sc.AnnData(gexpr_feature)
+-        sc.pp.normalize_total(adata)
++        sc.pp.normalize_total(adata) # each observation (cell) has a total count equal to the median of total counts for observations (cells)
+         sc.pp.log1p(adata)
+         gexpr_feature = pd.DataFrame(adata.X,index=adata.obs_names,columns=adata.var_names)
+ 
+@@ -126,7 +126,8 @@ def main():
+             key = 'gene'
+         else:
+             raise ValueError('output_mode must be one of cell gene, gene_batch, gene_expression')
+-    pretrainmodel,pretrainconfig = load_model_frommmf(ckpt_path,key)
++    pretrainmodel, pretrainconfig = load_model_frommmf(ckpt_path,key)
++    pretrainmodel.to(device)
+     pretrainmodel.eval()
+ 
+     geneexpemb=[]
+@@ -136,6 +137,8 @@ def main():
+     
+     #Inference
+     for i in tqdm(range(gexpr_feature.shape[0])):
++        gc.collect()
++        torch.cuda.empty_cache()
+         with torch.no_grad():
+             #Bulk
+             if args.input_type == 'bulk':
+@@ -146,7 +149,7 @@ def main():
+                 else:
+                     raise ValueError('pre_normalized must be T or F')
+                 tmpdata = (gexpr_feature.iloc[i,:]).tolist()
+-                pretrain_gene_x = torch.tensor(tmpdata+[totalcount,totalcount]).unsqueeze(0).cuda()
++                pretrain_gene_x = torch.tensor(tmpdata+[totalcount,totalcount]).unsqueeze(0).to(device)
+                 data_gene_ids = torch.arange(19266, device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
+             
+             #Single cell
+@@ -168,11 +171,11 @@ def main():
+ 
+                 # select resolution
+                 if args.tgthighres[0] == 'f':
+-                    pretrain_gene_x = torch.tensor(tmpdata+[np.log10(totalcount*float(args.tgthighres[1:])),np.log10(totalcount)]).unsqueeze(0).cuda()
++                    pretrain_gene_x = torch.tensor(tmpdata+[np.log10(totalcount*float(args.tgthighres[1:])),np.log10(totalcount)]).unsqueeze(0).to(device)
+                 elif args.tgthighres[0] == 'a':
+-                    pretrain_gene_x = torch.tensor(tmpdata+[np.log10(totalcount)+float(args.tgthighres[1:]),np.log10(totalcount)]).unsqueeze(0).cuda()
++                    pretrain_gene_x = torch.tensor(tmpdata+[np.log10(totalcount)+float(args.tgthighres[1:]),np.log10(totalcount)]).unsqueeze(0).to(device)
+                 elif args.tgthighres[0] == 't':
+-                    pretrain_gene_x = torch.tensor(tmpdata+[float(args.tgthighres[1:]),np.log10(totalcount)]).unsqueeze(0).cuda()
++                    pretrain_gene_x = torch.tensor(tmpdata+[float(args.tgthighres[1:]),np.log10(totalcount)]).unsqueeze(0).to(device)
+                 else:
+                     raise ValueError('tgthighres must be start with f, a or t')
+                 data_gene_ids = torch.arange(19266, device=pretrain_gene_x.device).repeat(pretrain_gene_x.shape[0], 1)
+@@ -186,7 +189,14 @@ def main():
+                 x = pretrainmodel.token_emb(torch.unsqueeze(x, 2).float(), output_weight = 0)
+                 position_emb = pretrainmodel.pos_emb(position_gene_ids)
+                 x += position_emb
+-                geneemb = pretrainmodel.encoder(x,x_padding)
++                
++                if x.shape[1] > 11000: #! the length of non-zero values
++                    pretrainmodel.cpu()
++                    x, x_padding = x.cpu(), x_padding.cpu()
++                    geneemb = pretrainmodel.encoder(x, x_padding)
++                    pretrainmodel.to(device)
++                else:
++                    geneemb = pretrainmodel.encoder(x, x_padding)
+ 
+                 geneemb1 = geneemb[:,-1,:]
+                 geneemb2 = geneemb[:,-2,:]
+@@ -199,6 +209,7 @@ def main():
+                 else:
+                     raise ValueError('pool_type must be all or max')
+                 geneexpemb.append(geneembmerge.detach().cpu().numpy())
++                del geneemb, geneemb1, geneemb2, geneemb3, geneemb4, geneembmerge
+ 
+             #Gene embedding
+             elif args.output_type=='gene':
+@@ -235,6 +246,7 @@ def main():
+                             decoder_data_padding_labels=decoder_data_padding,
+                             )
+                 geneexpemb = out[:,:19264,:].contiguous().detach().cpu().numpy()
++                
+             #Gene_expression
+             elif args.output_type=='gene_expression':
+                 encoder_data, encoder_position_gene_ids, encoder_data_padding, encoder_labels, decoder_data, decoder_data_padding, new_data_raw, data_mask_labels, decoder_position_gene_ids = getEncoerDecoderData(pretrain_gene_x.float(),pretrain_gene_x.float(),pretrainconfig)
+@@ -249,6 +261,7 @@ def main():
+                             )
+                 out = out[:,:19264].contiguous()
+                 geneexpemb.append(out.detach().cpu().numpy())                
++            
+             else:
+                 raise ValueError('output_type must be cell or gene or gene_batch or gene_expression')
+     geneexpemb = np.squeeze(np.array(geneexpemb))
+diff --git a/model/load.py b/model/load.py
+index fe26ae0..d319d21 100644
+--- a/model/load.py
++++ b/model/load.py
+@@ -45,10 +45,9 @@ def gatherDatanopad(data, labels, pad_token_id):
+     return new_data, padding_labels
+ 
+ def gatherData(data, labels, pad_token_id):
+-    value_nums = labels.sum(1)
++    value_nums = labels.sum(1) # number of non-zero genes
+     max_num = max(value_nums)
+ 
+-
+     fake_data = torch.full((data.shape[0], max_num), pad_token_id,
+                            device=data.device)
+     data = torch.hstack([data, fake_data])
+@@ -144,7 +143,7 @@ def load_model_frommmf(best_ckpt_path, key='gene'):
+     model = select_model(config)
+     model_state_dict = model_data['model_state_dict']    
+     model.load_state_dict(model_state_dict)
+-    return model.cuda(),config
++    return model,config
+ 
+ def main_gene_selection(X_df, gene_list):
+     """
+diff --git a/model/pretrainmodels/mae_autobin.py b/model/pretrainmodels/mae_autobin.py
+index 953b4c9..b52f2e4 100644
+--- a/model/pretrainmodels/mae_autobin.py
++++ b/model/pretrainmodels/mae_autobin.py
+@@ -73,7 +73,7 @@ class AutoDiscretizationEmbedding2(nn.Module):
+         x[x_pad_idx[:,0],x_pad_idx[:,1],:] = pad_token_emb.repeat(x_pad_idx.shape[0],1)
+     
+         if output_weight:
+-            return x,weight
++            return x, weight
+         return x
+ 
+ class RandomPositionalEmbedding(nn.Module):
