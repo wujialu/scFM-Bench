@@ -225,6 +225,5 @@ The baseline code is from [SCAD](https://github.com/CompBioT/SCAD). See details 
 
 ## Acknowledgments
 Our implementation uses microsoft's
-[zero-shot-foundation](https://github.com/microsoft/zero-shot-scfoundation) code and 
-as a starting point.
+[zero-shot-foundation](https://github.com/microsoft/zero-shot-scfoundation) code as a starting point.
 Thanks for their great work and code, hope readers of interest could check their work, too.
