@@ -396,7 +396,7 @@ class OnClassModel:
 				test_Y_pred_all_new[:, self.nseen:] = stats.zscore(test_Y_pred_all_new[:, self.nseen:], axis = 0)
     
 			else:
-				test_Y_pred_all[unseen_ind, :-1] -= 1000000
+				test_Y_pred_all[unseen_ind, :self.nseen] -= 1000000
 				test_Y_pred_all[seen_ind, self.nseen:] -= 1000000
 
 			return test_Y_pred_seen, logits, test_Y_pred_all, test_Y_pred_all_new, seen_ind, seen_ind_before_refine, unseen_confidence, unseen_confidence_before_refine

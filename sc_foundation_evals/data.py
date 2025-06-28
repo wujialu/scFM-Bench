@@ -17,7 +17,8 @@ warnings.filterwarnings('ignore')
 
 class InputData():
     def __init__(self, 
-                 adata_dataset_path: str) -> None:
+                 adata_dataset_path: str,
+                 TF_name: Optional[str] = None) -> None:
         
         # check if the dataset exists
         if not os.path.isfile(adata_dataset_path):
@@ -32,6 +33,10 @@ class InputData():
         self.adata_path = adata_dataset_path
         # read in the dataset
         self.adata = sc.read(adata_dataset_path)
+
+        if TF_name is not None:
+            self.adata = self.adata[self.adata.obs.condition.isin(['{}+ctrl'.format(TF_name), 'ctrl'])]
+            log.info(f"Perturb Condition {TF_name} is selected.")
 
         self.data_config = dict(
             data_path = adata_dataset_path,
@@ -151,8 +156,7 @@ class InputData():
                                         normalize_total = normalize_total,
                                         n_hvg = n_hvg,
                                         n_bins = n_bins,
-                                        preprocessed_path = preprocessed_path,
-                                        **kwargs)
+                                        preprocessed_path = preprocessed_path)
             
         elif model_type == "geneformer":
             self._preprocess_data_geneformer(preprocessed_path = preprocessed_path,
@@ -160,11 +164,31 @@ class InputData():
                                              gene_name_id_dict = gene_name_id_dict,
                                              fract_matching = fract_matching,
                                              filter_cell_by_genes = filter_cell_by_genes,
-                                             filter_gene_by_cells = filter_gene_by_cells)
+                                             filter_gene_by_cells = filter_gene_by_cells,
+                                             **kwargs)
 
         # note raw preprocessed shape
         self.data_config["preprocessed__n_cells"] = self.adata.shape[0]
         self.data_config["preprocessed__n_genes"] = self.adata.shape[1]
+
+    def _subset_hvg(self, n_hvg=1024, data_is_raw=False, TF_name='BHLHE40', selected_genes=None):
+        if selected_genes is None:
+            sc.pp.highly_variable_genes(
+                self.adata,
+                layer=None,
+                n_top_genes=n_hvg,
+                batch_key=self.batch_key,
+                flavor="seurat_v3" if data_is_raw else "cell_ranger",
+                subset=False,
+            )
+            #! 保证TF gene被保留下来
+            TF_index = self.adata.var[self.adata.var.gene_name==TF_name].index
+            self.adata.var.loc[TF_index, 'highly_variable'] = True
+            self.adata = self.adata[:, self.adata.var["highly_variable"]]
+        else:
+            selected_genes = list(set(selected_genes).intersection(self.adata.var[self.gene_col]))
+            assert TF_name in selected_genes, "TF gene not in selected_genes"
+            self.adata = self.adata[:, self.adata.var[self.gene_col].isin(selected_genes)]
 
     def _preprocess_data_scGPT(self,
                                gene_vocab: List[str],
@@ -268,7 +292,8 @@ class InputData():
                                     save_ext: Literal["loom", "h5ad"] = "loom",
                                     fract_matching: float = 0.5,
                                     filter_cell_by_genes: int = 10,
-                                    filter_gene_by_cells: int = 10) -> None:
+                                    filter_gene_by_cells: int = 10,
+                                    **kwargs) -> None:
         
         # for geneformer we need the path to save the data, check if exists
         if preprocessed_path is None or not os.path.exists(preprocessed_path):
@@ -324,6 +349,10 @@ class InputData():
             f"Matched {fract*100:.2f}% genes ({n_matched}/{n_all_genes})"
             f" genes in vocabulary of size {len(gene_name_id_dict)}."
         )
+
+        # subset hvg
+        if kwargs.get("selected_genes", None) is not None:
+            self._subset_hvg(selected_genes=kwargs.get("selected_genes"))
 
         if save_ext == "loom":
             self.adata.write_loom(os.path.join(preprocessed_path, 

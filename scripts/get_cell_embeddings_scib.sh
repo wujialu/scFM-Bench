@@ -1,9 +1,11 @@
-device_id=1
+device_id=5
 dataset_type=reference
+
 # dataset_name=pancreas_scib
 # label_col=celltype
 dataset_name=Immune_all_human
 label_col=final_annotation
+
 batch_col=batch
 layer_key=counts
 gene_col=gene_symbols
@@ -13,7 +15,7 @@ data_is_raw=1
 pre_normalized=F
 normalize_total=1e4
 
-for model_name in scVI UCE xTrimoGene scVI Geneformer scGPT LangCell
+for model_name in scBERT #HVG Harmony scVI UCE xTrimoGene scVI Geneformer scGPT LangCell 
 do
     CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
         --dataset_type ${dataset_type} \

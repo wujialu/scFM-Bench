@@ -5,26 +5,12 @@ import numpy as np
 import pandas as pd
 import os
 from OnClass.OnClassModel import OnClassModel
-from utils import read_ontology_file, make_folder, read_data_file, read_exclude_data, parse_pkl, MapLabel2CL, MyDataset, calculate_subtype_acc
+from utils import read_ontology_file, make_folder, read_data_file, read_exclude_data, parse_pkl, MapLabel2CL, MyDataset, calculate_subtype_acc, seed_everything
 from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir
 from torch.utils.data import DataLoader
-import torch
-import random
 from sklearn.metrics import f1_score
 import json
 
-
-def seed_everything(seed=0):
-    # To fix the random seed
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # backends
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     
 if len(sys.argv) <= 2:
 	device = sys.argv[1]
@@ -85,7 +71,7 @@ def main(model_to_params):
 		
 		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file(dname, ontology_data_dir)
 		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
-		feature_file, filter_key, drop_key, label_key, label_file, gene_file = read_data_file(dname, scrna_data_dir, model=model)
+		feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file = read_data_file(dname, scrna_data_dir, model=model)
 
 		if feature_file.endswith('.pkl'):
 			feature, label, genes = parse_pkl(feature_file, label_file, gene_file, exclude_non_leaf_ontology = True, cell_ontology_file = cell_type_network_file)

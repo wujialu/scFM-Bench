@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import os
 from OnClass.OnClassModel import OnClassModel
-from utils import read_ontology_file, read_data, make_folder, read_data_file, read_data, parse_pkl, SplitTrainTest, MapLabel2CL, evaluate, MyDataset
+from utils import read_ontology_file, read_data, make_folder, read_data_file, read_data, parse_pkl, SplitTrainTest, MapLabel2CL, evaluate, MyDataset, seed_everything
 from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir
 from torch.utils.data import DataLoader
 import torch
@@ -13,29 +13,17 @@ import random
 from scipy.special import logsumexp
 import json
 
-
-def seed_everything(seed=0):
-    # To fix the random seed
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    # backends
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
     
 if len(sys.argv) <= 2:
 	device = sys.argv[1]
 	model = None
-	dnames = ["Diabetic_Kidney_Disease"] 
+	dnames = sys.argv[2]
+	dnames = dnames.split(",")
 else:
 	device = sys.argv[1]
 	model = sys.argv[2]
 	dnames = sys.argv[3]
 	dnames = dnames.split(",")
- 
     
 niter = 5 
 batch_correct = True
@@ -73,7 +61,7 @@ def main(model_to_params):
 		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file("cl", ontology_data_dir)	
 	
 		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
-		feature_file, filter_key, drop_key, label_key, label_file, gene_file = read_data_file(dname, scrna_data_dir)
+		feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file = read_data_file(dname, scrna_data_dir)
 
 		if feature_file.endswith('.pkl'):
 			feature, label, genes = parse_pkl(feature_file, label_file, gene_file, exclude_non_leaf_ontology = True, cell_ontology_file = cell_type_network_file)
@@ -158,7 +146,7 @@ def main(model_to_params):
 																			batch_correct = batch_correct, log_transform = False)	
 				test_dataset = MyDataset(cor_test_feature, test_Y)
 				test_loader = DataLoader(test_dataset, batch_size=minibatch_size, shuffle=False, num_workers=10)
-				pred_Y_seen, pred_Y_seen_logits, pred_Y_all, pred_Y_all_new, seen_ind, seen_ind_before_refine, unseen_conf, unseen_conf_before_refine = OnClass_test_obj.Predict(test_loader, use_normalize = False, unseen_ratio = unseen_ratio, refine=refine)
+				pred_Y_seen, pred_Y_seen_logits, pred_Y_all, pred_Y_all_new, seen_ind, seen_ind_before_refine, unseen_conf, unseen_conf_before_refine = OnClass_test_obj.Predict(test_loader, use_normalize = False, unseen_ratio = unseen_ratio, refine = refine)
 
 				#! save predictions
 				Y_truth_co = np.array([i2co[y] for y in test_Y])

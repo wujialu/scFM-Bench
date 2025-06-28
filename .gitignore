@@ -178,16 +178,24 @@ figures/
 output*/
 **/*result*/
 **/logs/
-notebooks/
 wandb/
-TOSICA/
-SSGCN/
+xTrimoGene/
 test*
 **/data/
 **/*.ipynb
 **/*.npy
 **/*.tar.gz*
+TOSICA/
+SSGCN/
+UCE/
+geneformer/
+LangCell/
+scGPT/
+scCello/
+**/_*.py
+move_files.sh
 
 # except
 !**/data/.gitkeep
 !**/output/.gitkeep
+!data/**/*.py

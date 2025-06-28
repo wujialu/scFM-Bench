@@ -7,7 +7,7 @@ label_col=final_annotation
 batch_col=batch
 layer_key=counts # for HVG selection
 
-for model in HVG scVI Geneformer scGPT UCE xTrimoGene LangCell
+for model in Seurat_cca Harmony #HVG scVI Geneformer scGPT UCE xTrimoGene LangCell
 do
     python 3_cell_clustering.py \
         --model_name ${model} \

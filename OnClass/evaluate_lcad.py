@@ -19,7 +19,7 @@ for line in fin:
 fin.close()
 
 # load prediction results
-model_list = ["scVI", "Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene"]
+model_list = ["scVI", "Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene", "Harmony", "Seurat_cca"]
 unseen_ratio_ls = [0]
 # unseen_ratio_ls = [0.1, 0.3, 0.5, 0.7, 0.9]
 test_ratio = 0.8

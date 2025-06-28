@@ -1,6 +1,6 @@
-device_id=6
-# dataset_type=reference
-dataset_type=query
+device_id=7
+dataset_type=reference
+# dataset_type=query
 data_folder=./data/datasets
 
 # dataset_name=Tabula_Sapiens_all
@@ -37,7 +37,7 @@ data_is_raw=1
 pre_normalized=F
 normalize_total=1e4
 
-for model_name in scVI #xTrimoGene scVI scGPT Geneformer LangCell UCE
+for model_name in scBERT #HVG Harmony scVI UCE xTrimoGene scVI Geneformer scGPT LangCell 
 do
     CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
         --data_folder ${data_folder} \

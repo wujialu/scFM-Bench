@@ -6,10 +6,10 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy import sparse
-import matplotlib.pyplot as plt
 import scvi
-from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward
+from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward, scbert_forward
 from sc_foundation_evals import data
+import harmonypy as hm
 import subprocess
 import time
 from functools import wraps
@@ -17,8 +17,6 @@ from functools import wraps
 import warnings
 os.environ["KMP_WARNINGS"] = "off"
 warnings.filterwarnings("ignore")
-
-import wandb
 
 def calculate_params(model):
     total_params = sum(
@@ -39,6 +37,7 @@ def args_parser():
     parser.add_argument('--batch_col', type=str, default=None)
     parser.add_argument('--label_col', type=str, default=None)
     parser.add_argument('--gene_col', type=str, default='gene_symbols')
+    parser.add_argument('--layer_key', type=str, default='counts')
     
     parser.add_argument('--model_name', type=str, default='scVI')
     parser.add_argument('--output_folder', type=str, default='./output')
@@ -48,14 +47,13 @@ def args_parser():
     
     parser.add_argument('--data_is_raw', type=int, default=1)
     parser.add_argument('--normalize_total', type=float, default=1e4)
-    
+    parser.add_argument('--seed', type=int, default=7)
+
     # params for Geneformer
     parser.add_argument('--save_ext', type=str, default='loom', choices=["loom", "h5ad"])
     
     # params for scGPT
-    parser.add_argument('--seed', type=int, default=7)
     parser.add_argument('--n_bins', type=int, default=51)
-    parser.add_argument('--layer_key', type=str, default='counts')
     
     # params for UCE
     parser.add_argument('--species', type=str, default="human")
@@ -68,6 +66,10 @@ def args_parser():
     parser.add_argument('--pre_normalized', type=str, default='F',choices=['F','T','A'], help='if normalized before input; default: False (F). choice: True(T), Append(A) When input_type=bulk: pre_normalized=T means log10(sum of gene expression). pre_normalized=F means sum of gene expression without normalization. When input_type=singlecell: pre_normalized=T or F means gene expression is already normalized+log1p or not. pre_normalized=A means gene expression is normalized and log1p transformed. the total count is appended to the end of the gene expression matrix.')
     parser.add_argument('--version',  type=str, default='rde', help='only valid for output_type=cell. For read depth enhancemnet, version=rde For others, version=ce')
     
+    # params for scBERT
+    parser.add_argument("--bin_num", type=int, default=5, help='Number of bins.')
+    parser.add_argument("--gene_num", type=int, default=16906, help='Number of genes.')
+
     args = parser.parse_args()
     return args
 
@@ -109,9 +111,7 @@ def main_gene_selection(X_df, gene_list):
     var['mask'] = [1 if i in to_fill_columns else 0 for i in list(var.index)]
     return X_df, to_fill_columns, var
 
-@monitor_inference_resources
-def run_scvi(args):
-    adata = sc.read(args.adata_path)
+def preprocess_sc_data(args, adata, min_genes=25, min_cells=10):
     if args.layer_key == "X":
         if args.data_is_raw and adata.raw is not None:
             adata.X = adata.raw.X.copy()
@@ -120,14 +120,22 @@ def run_scvi(args):
     else:
         adata.X = adata.layers[args.layer_key].copy()
         args.logger.info(f"Copy raw counts of gene expressions from adata.layers of {args.layer_key}")
-    
-    sc.pp.filter_cells(adata, min_genes=25) 
-    args.logger.info(f"After filter cells: {adata.X.shape}")
-    sc.pp.filter_genes(adata, min_cells=10)
-    args.logger.info(f"After filter genes {adata.X.shape}")
+
     if args.data_is_raw:
+        sc.pp.filter_cells(adata, min_genes=min_genes) 
+        args.logger.info(f"After filter cells: {adata.X.shape}")
+        sc.pp.filter_genes(adata, min_cells=min_cells)
+        args.logger.info(f"After filter genes {adata.X.shape}")
         sc.pp.normalize_total(adata, target_sum=args.normalize_total)
         sc.pp.log1p(adata)
+
+    return adata
+    
+
+@monitor_inference_resources
+def run_scvi(args):
+    adata = sc.read(args.adata_path)
+    adata = preprocess_sc_data(args, adata)
     
     #! test the performance with (scVI folder) or w/o batch key (scVI_hvg_wo_batchkey folder) for selection
     #! result: no significant difference for scIB, but significant to cell type annotation (Tabula dataset)
@@ -149,32 +157,12 @@ def run_scvi(args):
     emb_file = f"cell_emb_wo_batch.npy" if args.batch_col is None else f"cell_emb_{args.batch_col}.npy"
     # emb_file = f"cell_emb_wo_batch.npy" if args.batch_col is None else f"cell_emb.npy"
     np.save(os.path.join(args.output_dir, emb_file), cell_embeddings)
-    
+
+
 @monitor_inference_resources
 def run_scvi_surgery(args):
     query_adata = sc.read(args.adata_path)
-
-    def process_adata(adata):
-        if args.layer_key == "X":
-            if args.data_is_raw and adata.raw is not None:
-                adata.X = adata.raw.X.copy()
-                del adata.raw
-                args.logger.info("Copy raw counts of gene expressions from adata.raw.X")
-        else:
-            adata.X = adata.layers[args.layer_key].copy()
-            args.logger.info(f"Copy raw counts of gene expressions from adata.layers of {args.layer_key}")
-        
-        sc.pp.filter_cells(adata, min_genes=25) 
-        args.logger.info(f"After filter cells: {adata.X.shape}")
-        sc.pp.filter_genes(adata, min_cells=10)
-        args.logger.info(f"After filter genes {adata.X.shape}")
-        if args.data_is_raw:
-            sc.pp.normalize_total(adata, target_sum=args.normalize_total)
-            sc.pp.log1p(adata)
-            #!!! WARNING: adata.X seems to be already log-transformed.(adata.uns.log1p exists)
-        return adata
-    
-    query_adata = process_adata(query_adata)
+    query_adata = preprocess_sc_data(query_adata)
     query_adata.obs[args.ref_batch_col] = query_adata.obs[args.batch_col]
     scvi.model.SCVI.prepare_query_anndata(query_adata, args.scvi_ref_path)
     scvi_query = scvi.model.SCVI.load_query_data(
@@ -190,6 +178,34 @@ def run_scvi_surgery(args):
     args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
     emb_file = f"cell_emb_wo_batch.npy" if args.batch_col is None else "cell_emb.npy"
     np.save(os.path.join(args.output_dir, emb_file), cell_embeddings)
+
+
+def run_harmony(args):
+    adata = sc.read(args.adata_path)
+
+    if "X_pca" not in adata.obsm:
+        adata = preprocess_sc_data(args, adata)
+        sc.pp.highly_variable_genes(adata, flavor="seurat", subset=False, n_top_genes=args.n_hvg, batch_key=args.batch_col)
+        adata = adata[:, adata.var.highly_variable].copy()
+        sc.pp.scale(adata)
+        sc.tl.pca(adata, n_comps=50) 
+
+    ho = hm.run_harmony(adata.obsm["X_pca"], adata.obs, vars_use=args.batch_col)
+    cell_embeddings = ho.Z_corr.T
+    args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
+    np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
+
+
+def run_scfm_harmony(args):
+    adata = sc.read(args.adata_path)
+
+    # load cell embeddings from scFMs
+
+    ho = hm.run_harmony(cell_embeddings, adata.obs, vars_use=args.batch_col)
+    cell_embeddings = ho.Z_corr.T
+    args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
+    np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
+
 
 @monitor_inference_resources
 def run_geneformer(args):
@@ -245,13 +261,16 @@ def run_scgpt(args):
                                                explicit_save_dir = True)
     scgpt_model.create_configs(seed = args.seed, 
                                max_seq_len = args.n_hvg+1, 
-                               n_bins = args.n_bins)
+                               n_bins = args.n_bins,
+                               pos_embed_using = True)
     scgpt_model.load_pretrained_model()
     total_params = calculate_params(scgpt_model.model)
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
     
     input_data = data.InputData(adata_dataset_path = args.adata_path)
     vocab_list = scgpt_model.vocab.get_stoi().keys()
+    if args.batch_col is not None:
+        input_data.add_batch_labels(batch_key = args.batch_col)
     #! adata.X is normalized & log_transformed (use adata.raw.X or adata.layers["counts"])
     input_data.preprocess_data(gene_vocab = vocab_list,
                                model_type = "scGPT",
@@ -262,8 +281,7 @@ def run_scgpt(args):
                                n_bins = args.n_bins,
                                n_hvg = args.n_hvg
                                )
-    if args.batch_col is not None:
-        input_data.add_batch_labels(batch_key = args.batch_col)
+
     scgpt_model.tokenize_data(data = input_data,
                               input_layer_key = "X_binned",
                               include_zero_genes = False)
@@ -303,15 +321,12 @@ def run_xtrimo(args):
     else:
         adata.X = adata.layers[args.layer_key].copy()
         args.logger.info(f"Copy raw counts of gene expressions from adata.layers of {args.layer_key}")
-        
-    if sparse.issparse(adata.X):
-        adata.X = sparse.csr_matrix.toarray(adata.X) 
     
     if args.gene_col in adata.var.columns:
         columns = adata.var[args.gene_col].tolist()
     else:
         columns = adata.var.index.tolist()
-    X_df= pd.DataFrame(adata.X,index=adata.obs.index.tolist(),columns=columns) # read from csv file
+    X_df= pd.DataFrame(adata.X.A if sparse.issparse(adata.X) else adata.X, index=adata.obs.index.tolist(),columns=columns) # read from csv file
     gene_list_df = pd.read_csv('./xTrimoGene/OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
     gene_list = list(gene_list_df['gene_name'])
     X_df, to_fill_columns, var = main_gene_selection(X_df, gene_list)
@@ -364,10 +379,47 @@ def run_langcell(args):
     np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
 
 
+def run_scbert(args):
+    adata = sc.read(args.adata_path)
+    scbert_model = scbert_forward.scBERT_instance(saved_model_path = args.model_dir,
+                                                  batch_size = args.batch_size,
+                                                  save_dir = args.output_dir,
+                                                  num_workers = args.num_workers, 
+                                                  explicit_save_dir = True)
+    scbert_model.create_configs(seed = args.seed, 
+                                gene_num = args.gene_num, 
+                                bin_num = args.bin_num)
+    scbert_model.load_pretrained_model()
+    total_params = calculate_params(scbert_model.model)
+    print("Total params for the current model: {:.1f} million".format(total_params/1e6))
+
+    scbert_model.get_dataloader(adata_path = args.adata_path, 
+                                layer_key = args.layer_key,
+                                data_is_raw = bool(args.data_is_raw))
+
+    scbert_model.extract_embeddings(adata)
+    cell_embeddings = scbert_model.cell_embeddings
+    args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
+    np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
+
+
+def run_sccello(args):
+    pass
+
+
 def main(args):
     args.logger.info(f"Extract cell embeddeings using {args.model_name}")
     
-    if args.model_name.lower() == "scvi":
+    if args.model_name.lower() == "hvg":
+        args.n_hvg = 2000
+        adata = sc.read(args.adata_path)
+        adata = preprocess_sc_data(args, adata)
+        sc.pp.highly_variable_genes(adata, flavor="seurat", subset=False, n_top_genes=args.n_hvg, batch_key=args.batch_col)
+        cell_embeddings = adata[:, adata.var.highly_variable].X.toarray()
+        args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
+        np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
+
+    elif args.model_name.lower() == "scvi":
         args.n_hvg = 2000
         if args.dataset_type == "query":
             args.output_dir = args.output_dir + "_surgery"
@@ -395,13 +447,24 @@ def main(args):
     
     elif args.model_name.lower() == "xtrimogene":
         run_xtrimo(args)
+
+    elif args.model_name.lower() == "scbert":
+        args.model_dir = "./data/weights/scBERT"
+        run_scbert(args)
     
+    elif args.model_name.lower() == "sccello":
+        run_sccello(args)
+
     elif args.model_name.lower() == "langcell":
         args.model_dir = "./data/weights/LangCell"
         args.tokenizer_dir = "./data/weights/LangCell/tokenizer/BiomedBERT"
         args.preprocessed_dir = f"./data/datasets/geneformer/{args.dataset_name}/{args.layer_key}"
         run_langcell(args)
     
+    elif args.model_name.lower() == "harmony":
+        args.n_hvg = 2000
+        run_harmony(args)
+
     else:
         args.logger.error(f"The model name {args.model_name} is invalid")
     
@@ -413,11 +476,13 @@ if __name__ == "__main__":
     args.ref_adata_path = os.path.join(args.data_folder, f"{args.ref_dataset_name}.h5ad")
     args.embedding_key = f"X_{args.model_name.lower()}"
     args.output_dir = os.path.join(args.output_folder, args.dataset_name, args.layer_key, args.model_name)
+    # args.output_dir = os.path.join(args.output_folder, args.dataset_name, args.model_name)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     log_file_name = os.path.join(args.output_dir, "log.txt")
     args.logger = init_logger(log_file_name)
     
+    # import wandb
     # wandb.init(
     #     project="scFoundation",
     #     entity="violet-storm",

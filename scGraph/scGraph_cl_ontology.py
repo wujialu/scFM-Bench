@@ -3,8 +3,7 @@ import sys, time, pandas as pd, numpy as np, scanpy as sc
 import Data_Handler as dh
 import Utils_Handler as uh
 import os
-from scipy import spatial
-from random_walk import *
+from random_walk import emb_ontology, read_cell_type_nlp_network
 from tqdm import tqdm
 from scipy import sparse
 
@@ -48,7 +47,7 @@ if __name__ == "__main__":
 
     
     adata = sc.read(dh.DATA_RAW_[dataset], first_column_names=True)
-    for model in ["scVI", "Geneformer", "scGPT", "UCE", "xTrimoGene", "LangCell"]:
+    for model in ["scVI", "Geneformer", "scGPT", "UCE", "xTrimoGene", "LangCell", "Seurat_cca", "Harmony"]:
         embedding_key = f"X_{model.lower()}"
         if model.lower() == "xtrimogene":
             embedding_file = "mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
@@ -91,12 +90,11 @@ if __name__ == "__main__":
             ignore_.append(celltype)
             used_labels.remove(celltype)
 
-    df_combined = pd.concat(_collect_count_.values(), axis=0, sort=False)
-    concensus_df_count = df_combined.groupby(df_combined.index).mean()
-
     pca_graph = f"./reference_graph/{dataset}/concensus_df_pca.csv"
-    if os.path.isfile(pca_graph):
-        concensus_df_pca = pd.read_csv(pca_graph, index_col=0)
+    count_graph = f"./reference_graph/{dataset}/concensus_df_count.csv"
+    if os.path.isfile(pca_graph) and os.path.isfile(count_graph):
+        concensus_df_pca = pd.read_csv(pca_graph)
+        concensus_df_count = pd.read_csv(count_graph)
     else:
         for BATCH_ in tqdm(adata.obs[batch_key].unique()):
             adata_batch = adata[adata.obs[batch_key] == BATCH_].copy()
@@ -137,7 +135,11 @@ if __name__ == "__main__":
 
         df_combined = pd.concat(_collect_pca_.values(), axis=0, sort=False)
         concensus_df_pca = df_combined.groupby(df_combined.index).mean()
-        concensus_df_pca.to_csv(pca_graph)
+        concensus_df_pca.to_csv(pca_graph, index=False)
+        
+        df_combined = pd.concat(_collect_count_.values(), axis=0, sort=False)
+        concensus_df_count = df_combined.groupby(df_combined.index).mean()
+        concensus_df_pca.to_csv(count_graph, index=False)
 
     # NOTE: there are indeed some NaNs in the concensus_df_count, concensus_df_pca,
     # because there might not exist a batch including both (cell type A, cell type Y)
@@ -146,16 +148,16 @@ if __name__ == "__main__":
     if os.path.isfile(onto_graph):
         rwr_df = pd.read_csv(onto_graph, index_col=0)
     else:
-        # step1: construct the weighted cell ontology graph
+        #* step1: construct the weighted cell ontology graph
         nlp_emb_file = os.path.join(dh.ONTOLOGY_dir, "cl.ontology.langcell.emb")
         cell_type_network_file = os.path.join(dh.ONTOLOGY_dir, "cl.ontology.new")
         co2co_graph, co2co_nlp, co2vec_nlp, ontology_mat, co2i, i2co = read_cell_type_nlp_network(nlp_emb_file, cell_type_network_file)
 
-        # step2: perform random walk with restart to get the cell ontology emb
+        #* step2: perform random walk with restart to get the cell ontology emb
         onto_net_rwr = emb_ontology(i2co, co2co_nlp, ontology_mat, rst = 0.7)
         onto_dca_vector = uh.DCA_vector(onto_net_rwr, dim=256)[0]
 
-        # step3: compute class-wise Euclidean distance
+        #* step3: compute class-wise Euclidean distance
         rwr_centroids = {k: onto_dca_vector[i] for k, i in co2i.items()}
         rwr_df = uh.compute_classwise_distances(rwr_centroids)
         rwr_df.to_csv(onto_graph)
@@ -196,6 +198,7 @@ if __name__ == "__main__":
         res_df_detailed = pd.concat([res_df_detailed, _row_df_detailed], axis=1)
     if not os.path.exists(rf"{dh.RES_DIR}/scGraph"):
         os.makedirs(rf"{dh.RES_DIR}/scGraph")
+    #! 检查结果和上次的是否一致
     res_df.to_csv(rf"{dh.RES_DIR}/scGraph/{dataset}.csv")
     res_df_detailed.to_csv(rf"{dh.RES_DIR}/scGraph/{dataset}_rwr_detailed.csv")
     print(res_df)

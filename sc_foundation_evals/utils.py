@@ -508,15 +508,41 @@ def rearrange(mat: torch.Tensor,
     mat_reordered = mat[batch_indices, indx]
     return mat_reordered
 
-def reverse_permute(mat: torch.Tensor,
-                    indx: torch.Tensor) -> torch.Tensor:
+# def reverse_permute(mat: torch.Tensor,
+#                     indx: torch.Tensor) -> torch.Tensor:
+#     """
+#     Reverse the permutation of a 2D tensor A according to the indices indx
+#     Args:
+#         - mat: 2D tensor with shape (batch_size, seq_len)
+#         - indx: 2D tensor with shape (batch_size, seq_len)
+#     Returns:
+#         - Sorted 2D tensor with shape (batch_size, seq_len)
+#     """
+#     dims = torch.arange(indx.size(0)).reshape(-1, 1)
+#     return mat[dims, indx.argsort()]
+
+
+def reverse_permute(mat: torch.Tensor, indx: torch.Tensor):
     """
-    Reverse the permutation of a 2D tensor A according to the indices indx
-    Args:
-        - mat: 2D tensor with shape (batch_size, seq_len)
-        - indx: 2D tensor with shape (batch_size, seq_len)
+    Reverse permutation on both rows and columns of the attention matrix.
+    
+    mat: [batch_size, M] or [batch_size, M, M] 
+    indx: [batch_size, M] indices used for original sorting (permute)
+    
     Returns:
-        - Sorted 2D tensor with shape (batch_size, seq_len)
+        attn_scores_reversed: [batch_size, M, M] recovered to original order
     """
-    dims = torch.arange(indx.size(0)).reshape(-1, 1)
-    return mat[dims, indx.argsort()]
+    # Get inverse permutation
+    inv_perm = indx.argsort() 
+
+    # Create batch indices
+    batch_size = mat.size(0)
+    batch_indices = torch.arange(batch_size).reshape(-1, 1)
+
+    # reverse rows
+    mat = mat[batch_indices, inv_perm]  
+    if len(mat.shape) == 3:
+        # reverse columns
+        mat = mat.transpose(1, 2)[batch_indices, inv_perm].transpose(1, 2) 
+
+    return mat

@@ -4,6 +4,7 @@ import os
 import json
 import time
 import importlib.util
+import pickle
 
 from typing import Dict, Optional, List, Union
 
@@ -16,15 +17,13 @@ from torch.utils.data import Dataset, DataLoader
 # import utils from scgpt_eval
 from . import utils
 from .data import InputData
+from .helpers.custom_logging import log
 
 from scgpt import SubsetsBatchSampler
 from scgpt.model import TransformerModel
 from scgpt.tokenizer import tokenize_and_pad_batch
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
-
 from scgpt.utils import set_seed
-
-from .helpers.custom_logging import log
 
 # create a helper function to sanitize the name
 def sanitize_name(old_name):
@@ -301,8 +300,6 @@ class scGPT_instance():
                     dir = self.output_dir
                     )
 
-
-
     def update_config(self) -> None:
         if self.saved_model_path is None and self.model_run != "train":
             msg = "saved_model_path must be provided if model_run is not 'train'"
@@ -338,8 +335,7 @@ class scGPT_instance():
         for key in ["dist_url", "save_dir"]:
             if key in self.model_config.keys():
                 del self.model_config[key]
-        
-        
+            
     def load_vocab(self, 
                    vocab_file: str = None) -> None:
         
@@ -418,7 +414,6 @@ class scGPT_instance():
         if self._wandb:
             self._wandb.watch(self.model)
     
-    
     def load_pretrained_model(self) -> None:
         # check if configs are created
         if self.model_config is None:
@@ -479,8 +474,6 @@ class scGPT_instance():
 
         self.model.to(self.device)
 
-
-    # data_loader
     @staticmethod
     def prepare_dataloader(
         data_pt: Dict[str, torch.Tensor],
@@ -563,7 +556,7 @@ class scGPT_instance():
             raise ValueError(msg)
 
         input_data = (
-                data.adata.layers[input_layer_key].A
+                data.adata.layers[input_layer_key].A # sparse to dense
                 if issparse(data.adata.layers[input_layer_key])
                 else data.adata.layers[input_layer_key]
             )
@@ -603,15 +596,16 @@ class scGPT_instance():
         
         self.tokenized_data["values"] = self.tokenized_data["values"].float()
 
-
     def get_dataloader(self, 
+                       data: InputData, 
                        input_layer_key: str = "X_binned",
                        include_zero_gene: bool = False, 
                        drop_last: bool = False) -> None:
 
         # check if data is tokenized and make sure include zero genes is shared
         if not self._check_attr("tokenized_data"):
-            self.tokenize_data(input_layer_key = input_layer_key,
+            self.tokenize_data(data,
+                               input_layer_key = input_layer_key,
                                include_zero_gene = include_zero_gene)
         else:
             include_zero_gene = self.run_config['tokenizer__include_zero_genes']
@@ -672,7 +666,7 @@ class scGPT_instance():
         
         # check if data loader is created
         if not self._check_attr("data_loader"):
-            self.get_dataloader()
+            self.get_dataloader(data)
         
         self.model.eval()
         if not self.config_saved:
@@ -699,6 +693,7 @@ class scGPT_instance():
         batch_idxs = []
         mvc_output = []
         masked_values = []
+        first_batch = True
 
         # how many updates to log
         login_freq = len(self.data_loader) // self.n_log_reports
@@ -796,6 +791,12 @@ class scGPT_instance():
                                        .detach()
                                        .cpu()
                                        .numpy())
+                if first_batch:
+                    gene_embeddings = output_dict["gene_emb"].detach().cpu().numpy().sum(0) / len(self.data_loader.dataset)
+                    first_batch = False
+                else:
+                    gene_embeddings += output_dict["gene_emb"].detach().cpu().numpy().sum(0) / len(self.data_loader.dataset)
+
                 mlm_output.append(output_dict["mlm_output"]
                                   .detach()
                                   .cpu()
@@ -816,6 +817,10 @@ class scGPT_instance():
         self.cell_embeddings = self.cell_embeddings / np.linalg.norm(
             self.cell_embeddings, axis = 1, keepdims = True
         )
+
+        # gene embeddings (exclude <cls> token)
+        self.gene_embeddings = gene_embeddings[1:, :]
+
         # flatten the list of mlm_output
         self.mlm_output = np.concatenate(mlm_output, axis=0)
 
@@ -861,6 +866,78 @@ class scGPT_instance():
         data.adata.obs.to_csv(os.path.join(embeddings_subdir, 
                                            "adata_obs.csv"))
 
+    def extract_attn_weights(self, data: InputData) -> Optional[Dict[str, np.ndarray]]:
+        
+        # check if model is loaded 
+        if not self._check_attr("model"):
+            msg = "Please load model before extracting embeddings!"
+            log.error(msg)
+            raise ValueError(msg)
+        
+        # check if data loader is created
+        if not self._check_attr("data_loader"):
+            self.get_dataloader(data, include_zero_gene=True)
+        
+        self.model.eval()
+        if not self.config_saved:
+            self.save_config()
+
+        # save the retrieved attention weights to subdir
+        # output_dir = os.path.join(self.output_dir, "model_outputs")
+        os.makedirs(self.output_dir, exist_ok=True)
+        
+        msg = "Extracting attention weights"
+        log.info(msg)
+
+        dict_sum_condition = {}
+        condition_ids = np.array(data.adata.obs["condition"].tolist())
+
+        # how many updates to log
+        login_freq = len(self.data_loader) // self.n_log_reports
+
+        for batch, batch_data in enumerate(self.data_loader):
+            input_gene_ids = batch_data["gene_ids"].to(self.device)
+            input_values = batch_data["values"].to(self.device)
+
+            batch_idx = batch_data["idx"].numpy()
+
+            src_key_padding_mask = input_gene_ids.eq(self.vocab[self.model_config['pad_token']])
+            
+            if batch % login_freq == 0:
+                msg = f"Extracting attention weights for batch {batch+1}/{len(self.data_loader)}"
+                log.info(msg)
+
+            with torch.no_grad() and torch.cuda.amp.autocast(enabled=self.model_config['amp']):
+                attn_scores = self.model._encode_with_attn(
+                    input_gene_ids, 
+                    input_values, 
+                    src_key_padding_mask = src_key_padding_mask, 
+                    batch_labels = None, 
+                    num_attn_layers = 11)
+                outputs = attn_scores.detach().cpu().numpy()
+
+            batch_conditions = condition_ids[batch_idx]
+            for index, c in enumerate(batch_conditions):
+                # Keep track of sum per condition
+                if c not in dict_sum_condition:
+                    dict_sum_condition[c] = outputs[index, :, :] 
+                else:
+                    dict_sum_condition[c] += outputs[index, :, :] 
+
+        # Average rank-normed attention weights by condition
+        dict_sum_condition_mean = dict_sum_condition.copy()
+        dict_sum_condition_mean["gene_ids"] = self.gene_ids
+        dict_sum_condition_mean["gene_names"] = self.genes
+        groups = data.adata.obs.groupby('condition').groups
+        for i in groups.keys():
+            dict_sum_condition_mean[i] = dict_sum_condition_mean[i]/len(groups[i])
+            if self.run_config['append_cls']:
+                dict_sum_condition_mean[i] = dict_sum_condition_mean[i][1:, 1:]
+            assert dict_sum_condition_mean[i].shape == (len(self.genes), len(self.genes))
+
+        with open(os.path.join(self.output_dir, 'pretrain_attn_condition_mean.pkl'), 'wb') as f:
+            pickle.dump(dict_sum_condition_mean, f)
+
 
     def clean_up(self, 
                  save_model: bool = False) -> None:
@@ -869,7 +946,6 @@ class scGPT_instance():
             self._wandb.finish()
         
         if save_model:
-            import pickle
             # save the model
             with open(os.path.join(self.output_dir, "model.pkl"), "wb") as f:
                 pickle.dump(self.model, f)

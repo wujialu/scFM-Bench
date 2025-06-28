@@ -329,8 +329,10 @@ def graph_embedding_dca(A, i2l, mi=0, dim=20, unseen_l=None):
 	X = np.zeros((np.shape(sp)[0],dim))
 	svd_dim = min(dim, np.shape(sp)[0]-1)
 	if mi==0 or mi == 2:
+		# 线性降维
 		X[:,:svd_dim] = svd_emb(sp, dim=svd_dim)
 	else:
+		# 非线性降维，对数变换+SVD
 		X[:,:svd_dim] = DCA_vector(sp, dim=svd_dim)[0]
 	X_ret = np.zeros((nl, dim))
 	X_ret[seen_ind,:] = X

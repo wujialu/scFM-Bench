@@ -20,6 +20,7 @@ from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
 import networkx as nx
+import random
 
 nn_nhidden = [1000]
 rsts = [0.5,0.6,0.7,0.8]
@@ -205,6 +206,7 @@ def read_data_file(dname, data_dir, model=None):
 		drop_key = {}
 		label_file = None
 		gene_file = ''
+		batch_key = ''
 		label_key = 'cell_ontology_class'
 	elif 'muris' in dname:
 		tech = dname.split('_')[1]
@@ -228,6 +230,7 @@ def read_data_file(dname, data_dir, model=None):
 		label_file = data_dir + '/Allen_Brain/labels.pkl'
 		gene_file = data_dir + '/Allen_Brain/genes.pkl'
 		label_key = ''
+		batch_key = ''
 		filter_key = {}
 		drop_key = {}
 	elif 'krasnow' in dname:
@@ -236,6 +239,7 @@ def read_data_file(dname, data_dir, model=None):
 		label_file = data_dir + '/HLCA/'+tech+'_labels.pkl'
 		gene_file = data_dir + '/HLCA/'+tech+'_genes.pkl'
 		label_key = ''
+		batch_key = ''
 		filter_key = {}
 		drop_key = {}
 	elif dname == "HLCA_core":
@@ -244,6 +248,7 @@ def read_data_file(dname, data_dir, model=None):
 		drop_key = {}
 		label_file = None
 		gene_file = ''
+		batch_key = 'dataset'
 		label_key = 'cell_type'
 	elif dname == "Tabula_Sapiens_all":
 		feature_file = data_dir + "datasets/Tabula_Sapiens_all.h5ad"
@@ -251,6 +256,7 @@ def read_data_file(dname, data_dir, model=None):
 		drop_key = {}
 		label_file = None
 		gene_file = ''
+		batch_key = 'tissue_in_publication'
 		label_key = 'cell_ontology_class_new'
 	elif dname == "Diabetic_Kidney_Disease":
 		feature_file = data_dir + "datasets/Diabetic_Kidney_Disease.h5ad"
@@ -258,6 +264,7 @@ def read_data_file(dname, data_dir, model=None):
 		drop_key = {}
 		label_file = None
 		gene_file = ''
+		batch_key = ''
 		label_key = 'cell_type'
 	elif dname == "multi_tissue_tumor_part":
 		if model == "UCE":
@@ -268,14 +275,15 @@ def read_data_file(dname, data_dir, model=None):
 		drop_key = {"harm_study": "Qian et al"}
 		label_file = None
 		gene_file = ''
+		batch_key = ''
 		label_key = 'cell_type'	
 	else:
 		sys.exit('wrong dname '+dname)
   
 	if feature_file.endswith('.pkl'):
-		return feature_file, filter_key, drop_key, label_key, label_file, gene_file
+		return feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file
 	elif feature_file.endswith('.h5ad'):
-		return feature_file, filter_key, drop_key, label_key, label_file, gene_file
+		return feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file
 	sys.exit('wrong file suffix')
 
 def read_singlecell_data(dname, data_dir, ontology_dir, nsample = 500000000, read_tissue = False, exclude_non_leaf_ontology = True):
@@ -1521,8 +1529,20 @@ def calculate_subtype_acc(cell_ontology_file, y_true, y_pred):
 
 	return n_correct / len_data
 
-def evaluate(Y_pred_mat, Y_truth_vec, unseen_l, nseen, Y_truth_bin_mat = None, Y_pred_vec = None, Y_ind = None, Y_net = None, Y_net_mat = None, 
-			 write_screen = True, combine_unseen = False, prefix='', i2co=None, train_Y=None):
+def evaluate(Y_pred_mat, 
+			 Y_truth_vec, 
+			 unseen_l, 
+			 nseen, 
+			 Y_truth_bin_mat = None, 
+			 Y_pred_vec = None, 
+			 Y_ind = None, 
+			 Y_net = None, 
+			 Y_net_mat = None, 
+			 combine_unseen = False,
+			 write_screen = True,  
+			 prefix = '', 
+			 i2co = None, 
+			 train_Y = None):
 	#preprocess scores
 	unseen_l = np.array(list(unseen_l))
 	ncell, nclass = np.shape(Y_pred_mat) # with a extra unseen class
@@ -1682,8 +1702,6 @@ def read_type2genes(g2i, marker_gene,cl_obo_file):
 	fin.close()
 
 	return tp2genes
-
-
 
 
 def extend_accuracy(test_Y, test_Y_pred_vec, Y_net, unseen_l):
@@ -1943,3 +1961,15 @@ class MyDataset(Dataset):
 
 	def __getitem__(self, idx):
 		return self.X[idx], self.Y[idx]
+
+def seed_everything(seed=0):
+    # To fix the random seed
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # backends
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
