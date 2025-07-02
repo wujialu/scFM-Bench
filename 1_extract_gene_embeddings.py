@@ -14,12 +14,15 @@ from transformers import BertTokenizer, BertModel
 
 gene_set_df = pd.read_csv("./FRoGS/data/gene_id2symbol.csv")
 
+parent_model_dir = "/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights"
+# output_dir = 
+
 # xTrimoGene
-gene_list_file = "./xTrimoGene/OS_scRNA_gene_index.19264.tsv"
+gene_list_file = f"{parent_model_dir}/scFoundation/OS_scRNA_gene_index.19264.tsv"
 gene_list_df = pd.read_csv(gene_list_file, header=0, delimiter='\t')
 gene_list = list(gene_list_df['gene_name'])
 
-ckpt_path = "./xTrimoGene/model/models/models.ckpt"
+ckpt_path = f"{parent_model_dir}/scFoundation/models.ckpt"
 key = "cell"
 pretrainmodel, pretrainconfig = load_model_frommmf(ckpt_path, key)
 token_emb = pretrainmodel.pos_emb.weight
@@ -31,12 +34,12 @@ gene_emb_df.set_index("GeneID", inplace=True)
 gene_emb_df.drop(["Symbol"], axis=1).to_csv("./FRoGS/data/gene_vec_xtrimogene_768.csv", header=None)
 
 # Geneformer
-saved_model_path = "./data/weights/Geneformer/default/12L"
+saved_model_path = f"{parent_model_dir}/Geneformer/default/12L"
 model = BertForMaskedLM.from_pretrained(saved_model_path,
                                         output_attentions=False,
                                         output_hidden_states=True)
 
-dict_paths = "./data/weights/Geneformer/dicts"
+dict_paths = f"{parent_model_dir}/Geneformer/dicts"
 token_dictionary_path = os.path.join(dict_paths, "token_dictionary.pkl")
 with open(token_dictionary_path, "rb") as f:
     vocab = pickle.load(f)
@@ -58,7 +61,7 @@ gene_emb_df.set_index("GeneID", inplace=True)
 gene_emb_df.drop(["Symbol","ENSG_ID"], axis=1).to_csv("./FRoGS/data/gene_vec_geneformer_512.csv", header=None)
 
 # scGPT
-model_dir="./data/weights/scgpt/scGPT_human"
+model_dir=f"{parent_model_dir}/scgpt/scGPT_human"
 # batch_size depends on available GPU memory; should be a multiple of 8
 batch_size=32
 # output_dir is the path to which the results should be saved
@@ -95,7 +98,7 @@ gene_emb_df.set_index("GeneID", inplace=True)
 gene_emb_df.drop(["Symbol"], axis=1).to_csv("./FRoGS/data/gene_vec_scgpt_512.csv", header=None)
 
 # LangCell
-model = BertModel.from_pretrained('./LangCell/ckpt/cell_bert')
+model = BertModel.from_pretrained(f"{parent_model_dir}/LangCell/ckpt/cell_bert")
 token_emb = model.state_dict()['embeddings.word_embeddings.weight']
 
 gene_emb_df = pd.DataFrame(token_emb.numpy()[:-1, :])

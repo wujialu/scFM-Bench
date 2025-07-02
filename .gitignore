@@ -194,6 +194,7 @@ scGPT/
 scCello/
 **/_*.py
 move_files.sh
+*.slurm
 
 # except
 !**/data/.gitkeep

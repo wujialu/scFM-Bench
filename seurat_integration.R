@@ -2,6 +2,11 @@ library(Seurat)
 library(SeuratDisk)
 library(Matrix)
 library(reticulate)
+library(future)
+
+
+options(future.globals.maxSize = 40 * 1024^3)
+plan("multicore", workers = 4)
 
 # 从命令行传入数据集路径
 args <- commandArgs(trailingOnly = TRUE)
@@ -9,13 +14,14 @@ dataset_name <- args[1]
 batch_col <- args[2]
 
 # set env
-use_python("/data2/zhuyiheng/.conda/envs/singlecell/bin/python")  
-use_condaenv("/data2/zhuyiheng/.conda/envs/singlecell")  # 使用 conda 环境
+use_python("/home/wujialu/.conda/envs/singlecell/bin/python")  
+use_condaenv("/home/wujialu/.conda/envs/singlecell")  # 使用 conda 环境
+data_dir <- "/mnt/nvme/extra_data/wujialu/scFM-Bench/data/datasets/"
 sc <- import("scanpy")
 np <- import("numpy")
 
 # load Anndata and transform to Seurat object
-input_file <- paste0("data/datasets/", dataset_name, ".h5ad")
+input_file <- paste0(data_dir, dataset_name, ".h5ad")
 adata <- sc$read_h5ad(input_file)
 if (!is.null(adata$raw)) {
   adata$layers["counts"] <- adata$raw$X
@@ -39,17 +45,19 @@ seurat_obj <- NormalizeData(seurat_obj, normalization.method = "LogNormalize", s
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000)
 seurat_obj <- ScaleData(seurat_obj)
 seurat_obj <- RunPCA(seurat_obj)
+cat("Calling IntegrateLayers...\n")
 obj <- IntegrateLayers(
   object = seurat_obj, method = CCAIntegration,
   orig.reduction = "pca", new.reduction = "integrated.cca",
   verbose = FALSE
 )
+cat("Integration completed.\n")
 
 # save integrated cell embeddings
 cca_mat <- obj@reductions$integrated.cca@cell.embeddings
 cca_mat <- as.matrix(cca_mat)
 cat("Integrated CCA matrix shape: ", dim(cca_mat), "\n")
-output_dir <- paste0("output/", dataset_name, "/Seurat_cca")
+output_dir <- paste0("output/", dataset_name, "/X/Seurat_cca")
 output_file <- paste0(output_dir, "/cell_emb.npy")
 
 if (!dir.exists(output_dir)) {
@@ -61,3 +69,4 @@ np$save(output_file, cca_mat)
 # Rscript seurat_integration.R Immune_all_human_scib batch
 # Rscript seurat_integration.R HLCA_core dataset
 # Rscript seurat_integration.R Tabula_Sapiens_all tissue_in_publication
+# Rscript seurat_integration.R AIDA_v2_new donor_id

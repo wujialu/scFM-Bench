@@ -7,6 +7,7 @@ from typing import List, Optional, Union, Dict, Literal
 
 import numpy as np
 from scgpt.preprocess import Preprocessor
+import scipy.sparse as sp
 
 from .helpers.custom_logging import log
 
@@ -355,11 +356,12 @@ class InputData():
             self._subset_hvg(selected_genes=kwargs.get("selected_genes"))
 
         if save_ext == "loom":
-            self.adata.write_loom(os.path.join(preprocessed_path, 
-                                               f"{self.dataset_name}.loom"))
+            if sp.issparse(self.adata.X):
+                self.adata.X = self.adata.X.toarray()
+            self.adata.write_loom(os.path.join(preprocessed_path, f"{self.dataset_name}.loom"),
+                                  write_obsm_varm=False)
         elif save_ext == "h5ad":
-            self.adata.write_h5ad(os.path.join(preprocessed_path, 
-                                               f"{self.dataset_name}.h5ad"))
+            self.adata.write_h5ad(os.path.join(preprocessed_path, f"{self.dataset_name}.h5ad"))
 
     
     def get_config(self):

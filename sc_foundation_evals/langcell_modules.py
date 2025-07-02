@@ -976,27 +976,41 @@ class LangCellDataCollatorForCellClassification(DataCollatorForCellClassificatio
         self.tokenizer = LangCellPrecollatorForGeneAndCellClassification()
 
     def _prepare_batch(self, features):
+        max_length = 0
         if self.add_cls:
             for i in range(len(features)):
                 features[i]['input_ids'] = ([int(self.tokenizer.cls_token_id)] + features[i]['input_ids'])[:2048]
+                max_length = max(max_length, len(features[i]['input_ids']))
         
+        # transform to dict
+        features = {key: [example[key] for example in features] for key in features[0].keys()}
+        if features.get("sorted_indices", None):
+            features["sorted_indices"] = [
+                [-1] + seq[:2048] + [-1] * (max_length - len(seq)) for seq in features["sorted_indices"]
+            ]
+            
         batch = super()._prepare_batch(features)
         
         # Special handling for labels.
         # Ensure that tensor is created with the correct type
         # (it should be automatically the case, but let's make sure of it.)
-        first = features[0]
-        if "label" in first and first["label"] is not None:
-            if isinstance(first["label"], torch.Tensor):
-                label = first["label"].item()
-            elif isinstance(first["label"], list):
-                label = first["label"][0]
-            else:
-                label = first["label"]
-            dtype = torch.long if isinstance(label, int) else torch.float
-            batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
+
+        if "label" in features.keys():
+            dtype = torch.long if isinstance(features["label"][0], int) else torch.float
+            batch["labels"] = torch.tensor(features["label"], dtype=dtype)
+
+        # first = features[0]
+        # if "label" in first and first["label"] is not None:
+        #     if isinstance(first["label"], torch.Tensor):
+        #         label = first["label"].item()
+        #     elif isinstance(first["label"], list):
+        #         label = first["label"][0]
+        #     else:
+        #         label = first["label"]
+        #     dtype = torch.long if isinstance(label, int) else torch.float
+        #     batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
         
-        if "sorted_indices" in first and first["sorted_indices"] is not None:
-            batch["sorted_indices"] = torch.tensor([f["sorted_indices"] for f in features], dtype=torch.long)
+        # if "sorted_indices" in first and first["sorted_indices"] is not None:
+        #     batch["sorted_indices"] = torch.tensor([f["sorted_indices"] for f in features], dtype=torch.long)
             
         return batch

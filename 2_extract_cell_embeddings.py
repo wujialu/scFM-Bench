@@ -5,7 +5,7 @@ from loggers import init_logger
 import numpy as np
 import pandas as pd
 import scanpy as sc
-from scipy import sparse
+import scipy.sparse as sp
 import scvi
 from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward, scbert_forward
 from sc_foundation_evals import data
@@ -18,6 +18,9 @@ import warnings
 os.environ["KMP_WARNINGS"] = "off"
 warnings.filterwarnings("ignore")
 
+#TODO: change model_dir (add params)
+#TODO: remove UCE/data_proc, UCE/model_files to extra_data path
+
 def calculate_params(model):
     total_params = sum(
 	param.numel() for param in model.parameters()
@@ -28,6 +31,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--data_folder', type=str, default='./data/datasets')
+    parser.add_argument('--model_dir', type=str, default='./data/weights')
     parser.add_argument('--dataset_name', type=str, default='pancreas_scib')
     parser.add_argument('--dataset_type', type=str, default='reference')
     parser.add_argument('--ref_dataset_name', type=str, default='Tabula_Sapiens_all')
@@ -43,7 +47,7 @@ def args_parser():
     parser.add_argument('--output_folder', type=str, default='./output')
     
     parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--num_workers', type=int, default=-1)
+    parser.add_argument('--num_workers', type=int, default=1)
     
     parser.add_argument('--data_is_raw', type=int, default=1)
     parser.add_argument('--normalize_total', type=float, default=1e4)
@@ -261,8 +265,7 @@ def run_scgpt(args):
                                                explicit_save_dir = True)
     scgpt_model.create_configs(seed = args.seed, 
                                max_seq_len = args.n_hvg+1, 
-                               n_bins = args.n_bins,
-                               pos_embed_using = True)
+                               n_bins = args.n_bins)
     scgpt_model.load_pretrained_model()
     total_params = calculate_params(scgpt_model.model)
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
@@ -326,8 +329,8 @@ def run_xtrimo(args):
         columns = adata.var[args.gene_col].tolist()
     else:
         columns = adata.var.index.tolist()
-    X_df= pd.DataFrame(adata.X.A if sparse.issparse(adata.X) else adata.X, index=adata.obs.index.tolist(),columns=columns) # read from csv file
-    gene_list_df = pd.read_csv('./xTrimoGene/OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
+    X_df= pd.DataFrame(adata.X.A if sp.issparse(adata.X) else adata.X, index=adata.obs.index.tolist(),columns=columns) # read from csv file
+    gene_list_df = pd.read_csv(f'{args.model_path}/OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
     gene_list = list(gene_list_df['gene_name'])
     X_df, to_fill_columns, var = main_gene_selection(X_df, gene_list)
     
@@ -335,8 +338,14 @@ def run_xtrimo(args):
     if not os.path.exists(preprocessed_dir):
         os.makedirs(preprocessed_dir)
     dataset_name = os.path.basename(args.adata_path).split(".")[0]
-    preprocessed_path = os.path.join(preprocessed_dir, f"{dataset_name}_19264_{args.layer_key}.npy")
-    np.save(preprocessed_path, X_df.to_numpy())
+    # preprocessed_path = os.path.join(preprocessed_dir, f"{dataset_name}_19264_{args.layer_key}.npy")
+    # np.save(preprocessed_path, X_df.to_numpy())
+    preprocessed_path = os.path.join(preprocessed_dir, f"{dataset_name}_19264_{args.layer_key}.npz")
+    np.savez_compressed(preprocessed_path,
+        values=X_df.to_numpy(),
+        index=X_df.index.to_numpy(),
+        columns=X_df.columns.to_numpy()
+    )
     
     os.chdir("./xTrimoGene/model")
     command = ["python3", "get_embedding.py",
@@ -347,6 +356,7 @@ def run_xtrimo(args):
                "--tgthighres", args.tgthighres,
                "--data_path", preprocessed_path,
                "--save_path", args.output_dir,
+               "--model_path", args.model_path,
                "--pre_normalized", args.pre_normalized,
                "--version", args.version]
     
@@ -366,7 +376,13 @@ def run_langcell(args):
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
 
     dataset_name = os.path.basename(args.adata_path).split(".")[0]
-    langcell_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset"))
+    # langcell_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset")
+    processed_adata_path = os.path.join(args.preprocessed_dir, f"{dataset_name}.{args.save_ext}")
+    langcell_model.tokenize_data(adata_path = processed_adata_path,
+                                 dataset_path = args.preprocessed_dir,
+                                 cell_type_col = args.label_col,
+                                 data_is_raw = args.data_is_raw,
+                                 include_zero_genes = False)
     langcell_model.get_dataloader()
     
     # sc.read(.h5ad or .loom)
@@ -388,13 +404,15 @@ def run_scbert(args):
                                                   explicit_save_dir = True)
     scbert_model.create_configs(seed = args.seed, 
                                 gene_num = args.gene_num, 
-                                bin_num = args.bin_num)
+                                bin_num = args.bin_num,
+                                pos_embed_using = True)
     scbert_model.load_pretrained_model()
     total_params = calculate_params(scbert_model.model)
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
 
     scbert_model.get_dataloader(adata_path = args.adata_path, 
                                 layer_key = args.layer_key,
+                                gene_col = args.gene_col,
                                 data_is_raw = bool(args.data_is_raw))
 
     scbert_model.extract_embeddings(adata)
@@ -404,6 +422,7 @@ def run_scbert(args):
 
 
 def run_sccello(args):
+    #TODO: add the implementation of scCello
     pass
 
 
@@ -428,37 +447,38 @@ def main(args):
             run_scvi(args)
         
     elif args.model_name.lower() == "geneformer":
-        args.model_dir = "./data/weights/Geneformer/default/12L"
-        args.dict_dir = "./data/weights/Geneformer/dicts"
-        args.preprocessed_dir = f"./data/datasets/geneformer/{args.dataset_name}/{args.layer_key}"
+        args.dict_dir = os.path.join(args.model_dir, "Geneformer/dicts")
+        args.model_dir = os.path.join(args.model_dir, "Geneformer/default/12L")
+        args.preprocessed_dir = os.path.join(args.data_folder, f"geneformer/{args.dataset_name}/{args.layer_key}")
         if not os.path.exists(args.preprocessed_dir):
             os.makedirs(args.preprocessed_dir)
         run_geneformer(args)
         
     elif args.model_name.lower() == "scgpt":
-        args.model_dir = "./data/weights/scgpt/scGPT_human"
+        args.model_dir = os.path.join(args.model_dir, "scgpt/scGPT_human")
         args.n_hvg = 1200
         run_scgpt(args)
     
     elif args.model_name.lower() == "uce":
-        args.model_loc = "./data/weights/UCE/33l_8ep_1024t_1280.torch"
+        args.model_loc = os.path.join(args.model_dir, "UCE/33l_8ep_1024t_1280.torch")
         args.output_dir = args.output_dir + "/"
         run_uce(args)
     
     elif args.model_name.lower() == "xtrimogene":
+        args.model_path = os.path.join(args.model_dir, "scFoundation")
         run_xtrimo(args)
 
     elif args.model_name.lower() == "scbert":
-        args.model_dir = "./data/weights/scBERT"
+        args.model_dir = os.path.join(args.model_dir, "scBERT")
         run_scbert(args)
     
     elif args.model_name.lower() == "sccello":
         run_sccello(args)
 
     elif args.model_name.lower() == "langcell":
-        args.model_dir = "./data/weights/LangCell"
-        args.tokenizer_dir = "./data/weights/LangCell/tokenizer/BiomedBERT"
-        args.preprocessed_dir = f"./data/datasets/geneformer/{args.dataset_name}/{args.layer_key}"
+        args.model_dir = os.path.join(args.model_dir, "LangCell")
+        args.tokenizer_dir = os.path.join(args.model_dir, "tokenizer/BiomedBERT")
+        args.preprocessed_dir = os.path.join(args.data_folder, f"geneformer/{args.dataset_name}/{args.layer_key}")
         run_langcell(args)
     
     elif args.model_name.lower() == "harmony":

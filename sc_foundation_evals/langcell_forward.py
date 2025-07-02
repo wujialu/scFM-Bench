@@ -234,9 +234,9 @@ class Langcell_instance():
             adata_dir = os.path.dirname(adata_path)
 
             self.tokenizer.tokenize_data(adata_dir,
-                                        dataset_path, 
-                                        dataset_name,
-                                        file_format=ext)
+                                         dataset_path, 
+                                         dataset_name,
+                                         file_format=ext)
 
         # tokenizer does not return the dataset
         # load the dataset
@@ -309,7 +309,7 @@ class Langcell_instance():
     
     def extract_embeddings(self,
                            data: InputData,
-                           embedding_key: str = "langcell",
+                           embedding_key: str = "X_LangCell",
                            ):
 
         # check if data loader is created

@@ -1,7 +1,10 @@
-device_id=7
+device_id=0
+num_workers=4
 dataset_type=reference
 # dataset_type=query
-data_folder=./data/datasets
+data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/datasets
+model_dir=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights
+output_folder=/home/wujialu/scFM-Bench/output
 
 # dataset_name=Tabula_Sapiens_all
 # label_col=cell_ontology_class_new
@@ -11,10 +14,18 @@ data_folder=./data/datasets
 # ref_batch_col=dataset
 # scvi_ref_path=./output/${ref_dataset_name}/scVI
 
-dataset_name=HLCA_core
-label_col=cell_type
-batch_col=dataset
-save_ext=loom
+# dataset_name=HLCA_core
+# label_col=cell_type
+# batch_col=dataset
+# save_ext=loom
+# ref_dataset_name=Tabula_Sapiens_all
+# ref_batch_col=tissue_in_publication
+# scvi_ref_path=./output/${ref_dataset_name}/scVI
+
+dataset_name=AIDA_v2_new
+label_col=cell_type_ontology_term_id # 32 cell types
+batch_col=donor_id  # 121 donors
+save_ext=h5ad
 ref_dataset_name=Tabula_Sapiens_all
 ref_batch_col=tissue_in_publication
 scvi_ref_path=./output/${ref_dataset_name}/scVI
@@ -32,15 +43,17 @@ scvi_ref_path=./output/${ref_dataset_name}/scVI
 
 layer_key=X
 gene_col=feature_name
-batch_size=32  
+batch_size=16
 data_is_raw=1
 pre_normalized=F
 normalize_total=1e4
 
-for model_name in scBERT #HVG Harmony scVI UCE xTrimoGene scVI Geneformer scGPT LangCell 
+for model_name in LangCell # HVG Harmony scVI scGPT Geneformer scBERT UCE xTrimoGene
 do
     CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+        --num_workers ${num_workers} \
         --data_folder ${data_folder} \
+        --model_dir ${model_dir} \
         --dataset_type ${dataset_type} \
         --ref_dataset_name ${ref_dataset_name} --ref_batch_col ${ref_batch_col} \
         --scvi_ref_path ${scvi_ref_path} \
@@ -52,5 +65,5 @@ do
         --model_name ${model_name} \
         --pre_normalized ${pre_normalized} \
         --data_is_raw ${data_is_raw} --normalize_total ${normalize_total} \
-        --output_folder './output' 
+        --output_folder ${output_folder}
 done

@@ -222,14 +222,14 @@ class scBERT_instance():
 
         return True
     
-    def preprocess_data(self, adata_path, layer_key, data_is_raw=True):
+    def preprocess_data(self, adata_path, layer_key, gene_col, data_is_raw=True):
         panglao = sc.read_h5ad(os.path.join(self.saved_model_path, 
                                             self.model_files['ref_data']))
         sc.pp.filter_genes(panglao, min_cells=0.05*len(panglao))
         adata = sc.read_h5ad(adata_path)
         counts = sparse.lil_matrix((adata.X.shape[0],panglao.X.shape[1]),dtype=np.float32)
         ref = panglao.var_names.tolist()
-        obj = adata.var_names.tolist()
+        obj = adata.var[gene_col].tolist()
 
         # copy raw data to adata.X
         if layer_key == "X":
@@ -311,11 +311,12 @@ class scBERT_instance():
     def get_dataloader(self,
                        adata_path: str,
                        layer_key: str,
+                       gene_col: str,
                        data_is_raw: bool = False,
                        shuffle: bool = False,
                        drop_last: bool = False) -> None:
         
-        data_pt = self.preprocess_data(adata_path, layer_key, data_is_raw)
+        data_pt = self.preprocess_data(adata_path, layer_key, gene_col, data_is_raw)
 
         msg = "Preparing dataloader"
         log.info(msg)
