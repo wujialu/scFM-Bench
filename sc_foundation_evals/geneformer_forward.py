@@ -218,9 +218,9 @@ class Geneformer_instance():
             adata_dir = os.path.dirname(adata_path)
 
             self.tokenizer.tokenize_data(adata_dir,
-                                        dataset_path, 
-                                        dataset_name,
-                                        file_format=ext)
+                                         dataset_path, 
+                                         dataset_name,
+                                         file_format=ext)
 
         # tokenizer does not return the dataset
         # load the dataset
@@ -256,7 +256,6 @@ class Geneformer_instance():
         # protein-coding and miRNA gene list dictionary for selecting .loom rows for tokenization
         self.genelist_dict = dict(zip(self.gene_keys, [True] * len(self.gene_keys)))
 
-
     def _extend_batch(self,
                       batch_dataset: Dataset,
                       return_attention_mask: bool = True):
@@ -264,6 +263,12 @@ class Geneformer_instance():
         
         batch_ = [pad_tensor(x, max_size, self.pad_token_id) 
                   for x in batch_dataset['input_ids']]
+        
+        if max_size > 2048:
+            msg = (f"Maximum sequence length is {max_size}, while the acceptable length is "
+                   f"2048. Please check the dataset and the tokenizer settings.")
+            log.error(msg)
+            raise ValueError(msg)
         
         batch_ = torch.stack(batch_).to(self.device)
 

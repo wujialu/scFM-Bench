@@ -6,7 +6,7 @@ import pandas as pd
 import os
 from OnClass.OnClassModel import OnClassModel
 from utils import read_ontology_file, make_folder, read_data_file, read_exclude_data, parse_pkl, MapLabel2CL, MyDataset, calculate_subtype_acc, seed_everything
-from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir
+from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir, cell_emb_dir
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 import json
@@ -54,24 +54,36 @@ def main(model_to_params):
 			cross_dataset = True
 			if dname == "multi_tissue_tumor_part":
 				target_labels = {'CL:0000057', 'CL:0000084', 'CL:0000097', 'CL:0000236', 'CL:0000784'}
-			else: # overlapped of remained cell types between HLCA and Tabula (#class=14)
+			elif dname == "HLCA_core" or source_dname == "HLCA_core": 
+				# overlapped of remained cell types between HLCA and Tabula (#class=14)
 				target_labels = {'CL:0000860', 'CL:0002543', 'CL:0000875', 'CL:0000077', 'CL:0002062', 'CL:0000786', 'CL:0000186', 
-								'CL:0002138', 'CL:0002063', 'CL:0000097', 'CL:0000158', 'CL:0002399', 'CL:0002144', 'CL:0000037'}
-		metrics = []
-		emb_dir = f"../output/{dname}"
+								 'CL:0002138', 'CL:0002063', 'CL:0000097', 'CL:0000158', 'CL:0002399', 'CL:0002144', 'CL:0000037'}
+			elif dname == "AIDA_v2_new" or source_dname == "AIDA_v2_new": 
+				# overlapped of remained cell types between AIDA and Tabula (#class=11)
+				target_labels = {'CL:0000037', 'CL:0000233', 'CL:0000786', 'CL:0000787', 'CL:0000788', 'CL:0000794', 'CL:0000895',
+					 			 'CL:0000900', 'CL:0000909', 'CL:0002394', 'CL:0002399'}
+		
+		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file(dname, ontology_data_dir)
+		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
+		data_info_dict = read_data_file(dname, scrna_data_dir)
+		feature_file = data_info_dict['feature_file']
+		label_file = data_info_dict['label_file']
+		gene_file = data_info_dict['gene_file']
+		filter_key = data_info_dict['filter_key']
+		label_key = data_info_dict['label_key']
+		layer_key = data_info_dict['layer_key']
+		batch_key = data_info_dict['batch_key']
+		emb_dir = os.path.join(cell_emb_dir, dname, layer_key)
+
 		if model == "xTrimoGene":
 			emb_file = f"{model}/mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
 		elif model == "scVI":
 			if cross_dataset:
 				emb_file = f"{model}_surgery/cell_emb.npy"
 			else:
-				emb_file = f"{model}/cell_emb.npy"
+				emb_file = f"{model}/cell_emb_{batch_key}.npy"
 		else:
 			emb_file = f"{model}/cell_emb.npy"
-		
-		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file(dname, ontology_data_dir)
-		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
-		feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file = read_data_file(dname, scrna_data_dir, model=model)
 
 		if feature_file.endswith('.pkl'):
 			feature, label, genes = parse_pkl(feature_file, label_file, gene_file, exclude_non_leaf_ontology = True, cell_ontology_file = cell_type_network_file)

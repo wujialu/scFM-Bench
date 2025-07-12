@@ -1,4 +1,4 @@
-device_id=2
+device_id=0
 repo_folder=$(dirname "$(dirname "$(readlink -f "$0")")")
 echo $repo_folder
 pushd $repo_folder > /dev/null

@@ -1,5 +1,8 @@
 device_id=0
-data_folder=./data/GRN_analysis
+data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/GRN_analysis
+model_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights
+output_folder=/home/wujialu/scFM-Bench/output
+
 dataset_name=adamson
 gene_col=gene_name
 save_ext=h5ad
@@ -14,10 +17,13 @@ input_type=singlecell
 output_type=attention
 tgthighres=f1
 
-for model_name in scGPT #Geneformer LangCell xTrimoGene
+#! scGPT: assertion error of len_genes
+for model_name in scGPT xTrimoGene # Geneformer LangCell scCello 
 do
     CUDA_VISIBLE_DEVICES=${device_id} python 4_extract_attn_weights.py \
         --data_folder ${data_folder} \
+        --model_folder ${model_folder} \
+        --output_folder ${output_folder} \
         --dataset_name ${dataset_name} \
         --layer_key ${layer_key} --gene_col ${gene_col} --label_col "${label_col}" \
         --save_ext ${save_ext} \

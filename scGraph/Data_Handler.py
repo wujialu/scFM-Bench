@@ -11,9 +11,10 @@ warnings.filterwarnings("ignore", category=ImplicitModificationWarning)
 
 SEED = 42
 MINCELLS = 256
-CUDA_DEVICE = "1"
+CUDA_DEVICE = "0"
 
-HOME_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "../.."))
+# HOME_DIR = os.path.realpath(os.path.join(os.path.dirname(__file__), "../.."))
+HOME_DIR = "/mnt/nvme/extra_data/wujialu"
 # print(HOME_DIR)
 PROJ_DIR = rf"{HOME_DIR}/scFM-Bench"
 MODEL_DIR = rf"{PROJ_DIR}/models"
@@ -54,6 +55,8 @@ DATA_RAW_ = {
     "Tabula_Sapiens_all": rf"{DATA_DIR}/Tabula_Sapiens_all.h5ad",
     #
     "HLCA_core": rf"{DATA_DIR}/HLCA_core.h5ad",
+    #
+    "AIDA_v2_new": rf"{DATA_DIR}/AIDA_v2_new.h5ad",
 }
 
 DATA_EMB_ = {
@@ -103,6 +106,9 @@ META_ = {
                   "cell_ontology_id": "cell_type_ontology_term_id",
                   "obs_label_keys": ["dataset", "donor_id", "assay", "cell_type"],
                   "layer_key": "X"},
+    "AIDA_v2_new": {"batch": "donor_id", "celltype": "cell_type", 
+                    "cell_ontology_id": "cell_type_ontology_term_id", 
+                    "layer_key": "X"},
 }
 
 # CELL2CAT_ = {

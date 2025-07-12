@@ -13,11 +13,9 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from sklearn.metrics import accuracy_score, f1_score
 
-model_ls = ["go", "archs4", "geneformer", "langcell", "scgpt", "uce", "xtrimogene"]
-dim_ls = [256, 256, 512, 512, 512, 5120, 768]
 
 tissue_gene = {}
-with open('../data/tissue_demo/tissue_specific.txt') as fr:
+with open('../data/tissue_specific.txt') as fr:
     for line in fr:
         items = line.split('\n')[0].split(',')
         tissue_gene[items[0]] = set(items[1:])
@@ -43,9 +41,9 @@ def seed_everything(seed=0):
     # backends
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-def get_data(model, dim):
-    with open(f'../data/gene_vec_{model}_{dim}.csv', mode='r') as infile:
+    
+def get_data(emb_file):
+    with open(emb_file, mode='r') as infile:
         reader = csv.reader(infile)
         gene_emb = {rows[0]:np.array(rows[1:], dtype=np.float32) for rows in reader}
 
@@ -139,7 +137,7 @@ def classify(X, y, output, method, clf_type="RF", device="cuda"):
         test_loader = DataLoader(test_dataset, batch_size=8)  
         
         best_valid_loss = 1e4
-        for epoch in range(50):
+        for epoch in range(200):
             clf.train()
             train_loss = []
             for batch in tqdm(train_loader):
@@ -175,8 +173,9 @@ def classify(X, y, output, method, clf_type="RF", device="cuda"):
                     y_hat.append(F.softmax(logits, dim=1).detach().cpu().numpy())
                     
                 y_hat = np.concatenate(y_hat).argmax(axis=1)
+                print("Update best valid loss at Epoch:", epoch, "Valid loss=", best_valid_loss)
                     
-            print(f"Epoch: {epoch}, Train loss: {np.mean(train_loss)}, Best valid loss: {best_valid_loss}")
+            print(f"Epoch: {epoch}, Train loss: {np.mean(train_loss)}")
         y_hat = np.array([train_dataset.id2label[y] for y in y_hat])
         
     print('Groundtruth', y[test_index])
@@ -188,8 +187,9 @@ def classify(X, y, output, method, clf_type="RF", device="cuda"):
     return acc, macro_f1
 
 #! get overlapping genes
-for model, dim in zip(model_ls, dim_ls):
-    with open(f'../data/gene_vec_{model}_{dim}.csv', mode='r') as infile:
+gene_emb_folder = "../gene_embs"
+for file in os.listdir(gene_emb_folder):
+    with open(os.path.join(gene_emb_folder, file), mode='r') as infile:
         reader = csv.reader(infile)
         gene_emb = {rows[0]:np.array(rows[1:], dtype=np.float32) for rows in reader}
 
@@ -208,15 +208,16 @@ for tissue in tissue_gene:
     num_genes += len(tissue_gene[tissue])
     
 results = []
-device = "cuda:1"
+device = "cuda:0"
 clf_type = "MLP"
 for iter in range(5):
-    index = np.arange(num_genes)
     seed_everything(iter)
+    index = np.arange(num_genes)
     np.random.shuffle(index)
     
-    for model, dim in zip(model_ls, dim_ls):
-        X, y = get_data(model, dim)
+    for file in os.listdir(gene_emb_folder):
+        model = file.split('_')[-2]
+        X, y = get_data(os.path.join(gene_emb_folder, file))
         acc, macro_f1 = classify(X, y, f"tsne_{model}.png", model, clf_type, device)
         results.append({"Model": model, "Accuracy": acc, "Macro F1": macro_f1})
 

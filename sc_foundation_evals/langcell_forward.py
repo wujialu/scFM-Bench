@@ -26,7 +26,7 @@ from datasets import load_from_disk
 import json
 from transformers import BertTokenizer, BertModel # cell_bert
 from .langcell_modules import BertModel as MedBertModel # text_bert
-from .langcell_modules import LangCellDataCollatorForCellClassification as DataCollatorForCellClassification
+from .langcell_modules import DataCollatorForCellClassificationWithCLS as DataCollatorForCellClassification
 from tqdm import tqdm
 
 
@@ -41,7 +41,7 @@ class Pooler(nn.Module):
         self.proj.load_state_dict(torch.load(pretrained_proj))
         
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        pooled_output = hidden_states[:, 0]
+        pooled_output = hidden_states[:, 0] # select cls token
         pooled_output = F.normalize(self.proj(pooled_output), dim=-1)
         return pooled_output
 
@@ -148,9 +148,12 @@ class Langcell_instance():
     def load_pretrained_model(self) -> None:
         
         self.model = BertModel.from_pretrained(os.path.join(self.saved_model_path, self.model_files["cell_encoder"]))
-        self.model.pooler = Pooler(self.model.config, proj_dim=256,
-                                   pretrained_proj=os.path.join(self.saved_model_path, self.model_files["cell_proj"]))
+        # self.model.pooler = Pooler(self.model.config, proj_dim=256,
+        #                            pretrained_proj=os.path.join(self.saved_model_path, self.model_files["cell_proj"]))
+        self.cell_pooler = Pooler(self.model.config, proj_dim=256,
+                                  pretrained_proj=os.path.join(self.saved_model_path, self.model_files["cell_proj"]))
         self.model.to(self.device)
+        self.cell_pooler.to(self.device)
         
         self.text_encoder = MedBertModel.from_pretrained(os.path.join(self.saved_model_path, self.model_files["text_encoder"]), add_pooling_layer=True)
         self.text_encoder.pooler = Pooler(self.text_encoder.config, proj_dim=256,
@@ -163,12 +166,12 @@ class Langcell_instance():
         
         log.info(f"Model successfully loaded from {self.saved_model_path}")
     
-    def load_tokenizer(self) -> None:
+    def load_text_tokenizer(self) -> None:
         
-        self.tokenizer = BertTokenizer.from_pretrained(self.saved_tokenizer_path)
-        self.tokenizer.add_special_tokens({'bos_token':'[DEC]'})
-        self.tokenizer.add_special_tokens({'additional_special_tokens':['[ENC]']})       
-        self.tokenizer.enc_token_id = self.tokenizer.additional_special_tokens_ids[0]  
+        self.text_tokenizer = BertTokenizer.from_pretrained(self.saved_tokenizer_path)
+        self.text_tokenizer.add_special_tokens({'bos_token':'[DEC]'})
+        self.text_tokenizer.add_special_tokens({'additional_special_tokens':['[ENC]']})       
+        self.text_tokenizer.enc_token_id = self.text_tokenizer.additional_special_tokens_ids[0]  
     
     def load_tokenized_dataset(self,
                                dataset_path: str,
@@ -211,10 +214,10 @@ class Langcell_instance():
                                     ['cell_type'] + columns_to_keep))
                 
             # initialize tokenizer
-            self.tokenizer = TranscriptomeTokenizer(cols_to_keep, 
-                                                    nproc = self.num_workers,
-                                                    data_is_raw = data_is_raw,
-                                                    include_zero_genes = include_zero_genes)
+            self.cell_tokenizer = TranscriptomeTokenizer(cols_to_keep, 
+                                                         nproc = self.num_workers,
+                                                         data_is_raw = data_is_raw,
+                                                         include_zero_genes = include_zero_genes)
 
             # get the extension from adata_path
             _, ext = os.path.splitext(adata_path)
@@ -233,10 +236,10 @@ class Langcell_instance():
             # get the top directory of the adata_pathx
             adata_dir = os.path.dirname(adata_path)
 
-            self.tokenizer.tokenize_data(adata_dir,
-                                         dataset_path, 
-                                         dataset_name,
-                                         file_format=ext)
+            self.cell_tokenizer.tokenize_data(adata_dir,
+                                              dataset_path, 
+                                              dataset_name,
+                                              file_format=ext)
 
         # tokenizer does not return the dataset
         # load the dataset
@@ -278,25 +281,36 @@ class Langcell_instance():
                                      collate_fn=collator, shuffle=False)
     
     def text_encode(self, text):
-        text = self.tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors='pt').to(self.device)
+        text = self.text_tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors='pt').to(self.device)
         text = self.text_encoder(**text).pooler_output
         # text = F.normalize(model.text_projector(text))
         return text
+    
+    def cellrepr_post_process(self, h_data, pass_cell_cls=False, normalize=False):
+        if pass_cell_cls and normalize:
+            h_data = self.cell_pooler(h_data)
+        
+        else:
+            h_data = h_data[:, 0]
+            if normalize:
+                h_data = F.normalize(h_data, p=2, dim=-1)
 
-    def cell_encode(self, cell_input_ids, cell_atts, output_attentions=False):
+        return h_data
+
+    def cell_encode(self, cell_input_ids, cell_atts, output_attentions=False, pass_cell_cls=True, normalize=True):
         cell = self.model(cell_input_ids.to(self.device), cell_atts.to(self.device),
                           output_attentions=output_attentions)
         cell_last_h = cell.last_hidden_state
-        cell_pooler = cell.pooler_output
+        cell_emb = self.cellrepr_post_process(cell_last_h, pass_cell_cls=pass_cell_cls, normalize=normalize)
 
         if output_attentions:
-            return cell_last_h, cell_pooler, cell.attentions
+            return cell_emb, cell.attentions
 
         else:
-            return cell_last_h, cell_pooler
+            return cell_emb
 
     def ctm(self, text, cell_emb, cell_atts):
-        text = self.tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors='pt').to(self.device)
+        text = self.text_tokenizer(text, padding=True, truncation=True, max_length=512, return_tensors='pt').to(self.device)
         output = self.text_encoder(**text,
                     encoder_hidden_states = cell_emb.to(self.device),
                     encoder_attention_mask = cell_atts.to(self.device),
@@ -309,6 +323,8 @@ class Langcell_instance():
     
     def extract_embeddings(self,
                            data: InputData,
+                           pass_cell_cls: bool = True,
+                           normalize: bool = True,
                            embedding_key: str = "X_LangCell",
                            ):
 
@@ -325,7 +341,8 @@ class Langcell_instance():
         for batch_id, batch_data in enumerate(tqdm(self.dataloader, desc="LangCell (extracting embeddings)")):
             with torch.no_grad():
                 #! mask zero padded genes (maxlen=2048)
-                cell_last_h, cellemb = self.cell_encode(batch_data['input_ids'], batch_data['attention_mask'])
+                cellemb = self.cell_encode(batch_data['input_ids'], batch_data['attention_mask'],
+                                           pass_cell_cls=pass_cell_cls, normalize=normalize)
             cell_embeddings.append(cellemb.detach().cpu().numpy())
             torch.cuda.empty_cache()
 
@@ -363,11 +380,16 @@ class Langcell_instance():
         for batch_id, batch_data in enumerate(tqdm(self.dataloader, desc="LangCell (extracting attention weights)")):
             with torch.no_grad():
                 # batch_data: dict_keys(['input_ids', 'attention_mask', 'labels', "sorted_indices"])
-                _, _, attn_scores = self.cell_encode(batch_data['input_ids'], batch_data['attention_mask'], output_attentions=True)
+                _, attn_scores = self.cell_encode(batch_data['input_ids'], batch_data['attention_mask'], output_attentions=True)
                 
             attn_scores = attn_scores[layer] # last layer
-            M = attn_scores.shape[-1]
             num_heads = attn_scores.size(1)
+            assert attn_scores.shape[-1] == batch_data["sorted_indices"].shape[-1] == batch_data["input_ids"].shape[-1]
+            if self.add_cls:
+                attn_scores = attn_scores[..., 1:, 1:]
+                batch_data["sorted_indices"] = batch_data["sorted_indices"][:, 1:]
+                batch_data["input_ids"] = batch_data["input_ids"] [:, 1:]
+            M = attn_scores.shape[-1]
 
             # Rank normalization by row
             attn_scores = attn_scores.reshape((-1, M))
@@ -383,11 +405,11 @@ class Langcell_instance():
             attn_scores = attn_scores.mean(1)
 
             # Sort attention scores by original order
-            sorted_indices = batch_data["sorted_indices"] # [batch_size, M]
+            sorted_indices = batch_data["sorted_indices"]
             attn_scores = utils.reverse_permute(attn_scores, sorted_indices) # # [batch_size, M, M]
             outputs = attn_scores.detach().cpu().numpy()
 
-            gene_ids = batch_data["input_ids"][:, 1:] # [batch_size, M+1], remove [CLS]
+            gene_ids = batch_data["input_ids"] 
             gene_ids = utils.reverse_permute(gene_ids, sorted_indices).numpy()
             assert np.all(gene_ids == ori_gene_ids, axis=1).all()
                 

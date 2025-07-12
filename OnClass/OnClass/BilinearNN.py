@@ -14,7 +14,7 @@ from sklearn.metrics import roc_auc_score, average_precision_score
 from scipy import stats
 from torch.nn.modules.loss import CrossEntropyLoss
 from tqdm import tqdm
-from .dag_transformer import GraphTransformer
+# from .dag_transformer import GraphTransformer
 
 class BilinearNN(nn.Module):
 	"""
@@ -39,10 +39,10 @@ class BilinearNN(nn.Module):
 		self.dot_product = dot_product
 
 		self.onto_graph = onto_graph
-		if self.onto_graph is not None:
-			self.ndim = 128
-			self.label_encoder = GraphTransformer(in_size=256, d_model=self.ndim, dim_feedforward=self.ndim*4, use_edge_attr=False, in_embed=False,
-												  num_layers=2, num_heads=4, dropout=0.2, batch_norm=True, SAT=False)
+		# if self.onto_graph is not None:
+		# 	self.ndim = 128
+		# 	self.label_encoder = GraphTransformer(in_size=256, d_model=self.ndim, dim_feedforward=self.ndim*4, use_edge_attr=False, in_embed=False,
+		# 										  num_layers=2, num_heads=4, dropout=0.2, batch_norm=True, SAT=False)
 			
 		if self.dot_product:
 			self.nhidden.append(self.ndim) # number of classes(one-hot) + class emb_dim

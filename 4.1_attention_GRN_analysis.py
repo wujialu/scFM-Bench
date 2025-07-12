@@ -1,52 +1,27 @@
-import copy
-import json
 import os
 from pathlib import Path
-import sys
 import warnings
 import pickle
-
-import torch
-from anndata import AnnData
 import scanpy as sc
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import networkx as nx
 import pandas as pd
-import tqdm
 import gseapy as gp
-from gears import PertData, GEARS
-
-from scipy.sparse import issparse
-import scipy as sp
-from einops import rearrange
-from torch.nn.functional import softmax
-from tqdm import tqdm
+from gears import PertData
 import pandas as pd
-
-from torchtext.vocab import Vocab
-from torchtext._torchtext import (
-    Vocab as VocabPybind,
-)
-
-sys.path.insert(0, "../")
-
-import scgpt as scg
-from scgpt.tasks import GeneEmbedding
-from scgpt.tokenizer.gene_tokenizer import GeneVocab
-from scgpt.model import TransformerModel
-from scgpt.utils import set_seed 
-from scgpt.tokenizer import tokenize_and_pad_batch
-from scgpt.preprocess import Preprocessor
 
 os.environ["KMP_WARNINGS"] = "off"
 warnings.filterwarnings('ignore')
 
-TF_name = 'BHLHE40'
-model_ls = ["scGPT", "Geneformer", "LangCell", "xTrimoGene"]
+data_folder = "/mnt/nvme/extra_data/wujialu/scFM-Bench/data"
+# output_folder = "/mnt/nvme/extra_data/wujialu/scFM-Bench/output"
+output_folder = "/home/wujialu/scFM-Bench/output"
 
-data_dir = Path("./data/GRN_analysis")
+TF_name = 'BHLHE40'
+model_ls = ["scGPT", "Geneformer", "LangCell", "scCello", "xTrimoGene"]
+
+data_dir = Path(f"{data_folder}/GRN_analysis")
 pert_data = PertData(data_dir)
 pert_data.load(data_name="adamson")
 adata = sc.read(data_dir / "adamson/perturb_processed.h5ad")
@@ -59,7 +34,7 @@ def get_topk_most_influenced_genes(topk, setting):
     attn_top_scores_dict = {}
     for i in groups.keys():
         if i != 'ctrl':
-            knockout_gene = i.split('+')[0]
+            # knockout_gene = i.split('+')[0]
             # knockout_gene_idx = np.where(gene_vocab_idx==vocab([knockout_gene])[0])[0][0]
             knockout_gene_idx = np.where(np.array(dict_sum_condition_mean["gene_names"])==TF_name)[0][0]
             control = dict_sum_condition_mean['ctrl'][:, knockout_gene_idx]
@@ -105,7 +80,7 @@ def score_overlap_genes_by_rank(df, gene_list):
 
 for model_name in model_ls:
     print(f"========== Start analysis for {model_name} ==========")
-    with open(f'./output/adamson/X/{model_name}/pretrain_attn_condition_mean.pkl', 'rb') as f:
+    with open(f'{output_folder}/adamson/X/{model_name}/pretrain_attn_condition_mean.pkl', 'rb') as f:
         dict_sum_condition_mean = pickle.load(f)
     
     setting = 'difference' # "control", "perturbed"
@@ -127,11 +102,11 @@ for model_name in model_ls:
             df_scores = pd.DataFrame(data = scores, columns = example_genes, index = example_genes)
             plt.figure(figsize=(6, 6), dpi=300)
             ax = sns.clustermap(df_scores, annot=False, cmap=sns.diverging_palette(145, 300, s=60, as_cmap=True), fmt='.2f', vmin=-0.3, vmax=0.3) 
-            plt.savefig(f'./output/adamson/X/{model_name}/heatmap_diff_top20_genes.png', dpi=300)
+            plt.savefig(f'{output_folder}/adamson/X/{model_name}/heatmap_diff_top20_genes.png', dpi=300)
     
 
     # validate against CHIP-atlas
-    df = pd.read_csv('./data/GRN_analysis/BHLHE40.10.tsv', delimiter='\t')
+    df = pd.read_csv(f'{data_folder}/GRN_analysis/BHLHE40.10.tsv', delimiter='\t')
     gene_list = attn_top_gene_dict_20[TF_name + '+ctrl'][:-1]
     scores, total_score, num_overlap_genes = score_overlap_genes_by_rank(df, gene_list)
     print("Individual scores:", scores)
@@ -153,11 +128,11 @@ for model_name in model_ls:
     enr_Reactome = gp.enrichr(gene_list=gene_list,
                               gene_sets=databases,
                               organism='Human',
-                              outdir=f"./output/adamson/X/{model_name}/enrichr_Reactome_{TF_name}",
+                              outdir=f"{output_folder}/adamson/X/{model_name}/enrichr_Reactome_{TF_name}",
                               cutoff=0.5) # cutoff for plotting
     out = enr_Reactome.results
     out['Gene List'] = str(gene_list)
-    out.to_csv(f"./output/adamson/X/{model_name}/enrichr_Reactome_{TF_name}/enrichr_results.csv")
+    out.to_csv(f"{output_folder}/adamson/X/{model_name}/enrichr_Reactome_{TF_name}/enrichr_results.csv")
     print("Enrichment results for Reactome:", len(out))
     out = out[out['P-value'] < p_thresh]
     print("Significant enrichment results for Reactome:", len(out))

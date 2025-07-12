@@ -902,6 +902,7 @@ class scGPT_instance():
             batch_idx = batch_data["idx"].numpy()
 
             src_key_padding_mask = input_gene_ids.eq(self.vocab[self.model_config['pad_token']])
+            num_genes = (src_key_padding_mask==False).sum(1)[0]
             
             if batch % login_freq == 0:
                 msg = f"Extracting attention weights for batch {batch+1}/{len(self.data_loader)}"
@@ -920,9 +921,9 @@ class scGPT_instance():
             for index, c in enumerate(batch_conditions):
                 # Keep track of sum per condition
                 if c not in dict_sum_condition:
-                    dict_sum_condition[c] = outputs[index, :, :] 
+                    dict_sum_condition[c] = outputs[index, :num_genes, :num_genes] 
                 else:
-                    dict_sum_condition[c] += outputs[index, :, :] 
+                    dict_sum_condition[c] += outputs[index, :num_genes, :num_genes] 
 
         # Average rank-normed attention weights by condition
         dict_sum_condition_mean = dict_sum_condition.copy()

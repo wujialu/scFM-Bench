@@ -1,6 +1,10 @@
-device_id=5
+# For cancer cell identification
+device_id=0
+data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/TISCH
+model_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights
+output_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/output/TISCH
+
 dataset_type=reference
-data_folder=./data/TISCH
 dataset_name=Blood/AEL_GSE142213
 gene_col=gene_symbols
 label_col="Celltype (malignancy)"
@@ -12,42 +16,46 @@ data_is_raw=0
 pre_normalized=T
 normalize_total=1e4
 
-for dataset_name in TISCH_combined
-do
-    for model_name in scVI
-    do
-        for batch_col in Patient dataset tumor tissue
-        do
-            CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
-                --dataset_type ${dataset_type} \
-                --data_folder ${data_folder} \
-                --dataset_name ${dataset_name} \
-                --layer_key ${layer_key} --gene_col ${gene_col} --label_col "${label_col}" \
-                --save_ext ${save_ext} \
-                --batch_size ${batch_size} \
-                --model_name ${model_name} \
-                --pre_normalized ${pre_normalized} \
-                --data_is_raw ${data_is_raw} --normalize_total ${normalize_total} \
-                --batch_col ${batch_col} 
-        done
-    done
-done
-
-# for dataset_name in Blood/AEL_GSE142213 Blood/ALL_GSE132509 Blood/AML_GSE116256 
-# for dataset_name in Bone/MM_GSE117156 Eye/UVM_GSE139829 Brain/Glioma_GSE131928_10X 
-# for dataset_name in Brain/Glioma_GSE138794 Brain/Glioma_GSE139448 Brain/Glioma_GSE141982 Brain/MB_GSE119926
+# for dataset_name in TISCH_combined
 # do
-#     for model_name in UCE
+#     for model_name in scVI
 #     do
-#         CUDA_VISIBLE_DEVICES=${device_id} python get_cell_embeddings.py \
-#             --dataset_type ${dataset_type} \
-#             --data_folder ${data_folder} \
-#             --dataset_name ${dataset_name} \
-#             --layer_key ${layer_key} --gene_col ${gene_col} --label_col "${label_col}" \
-#             --save_ext ${save_ext} \
-#             --batch_size ${batch_size} \
-#             --model_name ${model_name} \
-#             --pre_normalized ${pre_normalized} \
-#             --data_is_raw ${data_is_raw} --normalize_total ${normalize_total}
+#         for batch_col in Patient dataset tumor tissue
+#         do
+#             CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+#                 --dataset_type ${dataset_type} \
+#                 --data_folder ${data_folder} \
+#                 --dataset_name ${dataset_name} \
+#                 --layer_key ${layer_key} --gene_col ${gene_col} --label_col "${label_col}" \
+#                 --save_ext ${save_ext} \
+#                 --batch_size ${batch_size} \
+#                 --model_name ${model_name} \
+#                 --pre_normalized ${pre_normalized} \
+#                 --data_is_raw ${data_is_raw} --normalize_total ${normalize_total} \
+#                 --batch_col ${batch_col} 
+#         done
 #     done
 # done
+
+model_name=scCello
+for tissue in Blood Bone Brain Eye
+do
+    tissue_data_folder=${data_folder}/${tissue}
+    tissue_output_folder=${output_folder}/${tissue}
+    for dataset_file in $(ls ${tissue_data_folder}/*.h5ad)
+    do
+        dataset_name=$(basename ${dataset_file} .h5ad)
+        CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+            --dataset_type ${dataset_type} \
+            --data_folder ${tissue_data_folder} \
+            --model_folder ${model_folder} \
+            --output_folder ${tissue_output_folder} \
+            --dataset_name ${dataset_name} \
+            --layer_key ${layer_key} --gene_col ${gene_col} --label_col "${label_col}" \
+            --save_ext ${save_ext} \
+            --batch_size ${batch_size} \
+            --model_name ${model_name} \
+            --pre_normalized ${pre_normalized} \
+            --data_is_raw ${data_is_raw} --normalize_total ${normalize_total}
+    done
+done

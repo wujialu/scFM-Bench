@@ -208,6 +208,7 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = ''
 		label_key = 'cell_ontology_class'
+
 	elif 'muris' in dname:
 		tech = dname.split('_')[1]
 		feature_file = data_dir + 'Tabula_Muris_Senis/' + 'tabula-muris-senis-'+tech+'-official-raw-obj.h5ad'
@@ -217,6 +218,7 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = ''
 		label_key = 'cell_ontology_class'
+
 	elif 'sapiens' in dname:
 		feature_file = data_dir + 'sapiens/' + 'Pilot1_Pilot2_decontX_Oct2020.h5ad'
 		filter_key = {}
@@ -225,6 +227,7 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = ''
 		label_key = 'cell_ontology_type'
+
 	elif 'allen' in dname:
 		feature_file = data_dir + '/Allen_Brain/features.pkl'
 		label_file = data_dir + '/Allen_Brain/labels.pkl'
@@ -233,6 +236,7 @@ def read_data_file(dname, data_dir, model=None):
 		batch_key = ''
 		filter_key = {}
 		drop_key = {}
+
 	elif 'krasnow' in dname:
 		tech = dname.split('_')[1]
 		feature_file = data_dir + '/HLCA/'+tech+'_features.pkl'
@@ -242,6 +246,7 @@ def read_data_file(dname, data_dir, model=None):
 		batch_key = ''
 		filter_key = {}
 		drop_key = {}
+
 	elif dname == "HLCA_core":
 		feature_file = data_dir + "datasets/HLCA_core.h5ad"
 		filter_key = {}
@@ -250,6 +255,8 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = 'dataset'
 		label_key = 'cell_type'
+		layer_key = "X"
+
 	elif dname == "Tabula_Sapiens_all":
 		feature_file = data_dir + "datasets/Tabula_Sapiens_all.h5ad"
 		filter_key = {}
@@ -258,6 +265,18 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = 'tissue_in_publication'
 		label_key = 'cell_ontology_class_new'
+		layer_key = "X"
+
+	elif dname == "AIDA_v2_new":
+		feature_file = data_dir + "datasets/AIDA_v2_new.h5ad"
+		filter_key = {}
+		drop_key = {}
+		label_file = None
+		gene_file = ''
+		batch_key = 'donor_id'
+		label_key = 'cell_type'
+		layer_key = "X"
+		
 	elif dname == "Diabetic_Kidney_Disease":
 		feature_file = data_dir + "datasets/Diabetic_Kidney_Disease.h5ad"
 		filter_key = {}
@@ -266,6 +285,7 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = ''
 		label_key = 'cell_type'
+
 	elif dname == "multi_tissue_tumor_part":
 		if model == "UCE":
 			feature_file = data_dir + "TISCH/UCE/multi_tissue_tumor_part_proc_X.h5ad"
@@ -277,13 +297,22 @@ def read_data_file(dname, data_dir, model=None):
 		gene_file = ''
 		batch_key = ''
 		label_key = 'cell_type'	
+
 	else:
 		sys.exit('wrong dname '+dname)
-  
-	if feature_file.endswith('.pkl'):
-		return feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file
-	elif feature_file.endswith('.h5ad'):
-		return feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file
+	
+	data_info_dict = {
+		'feature_file': feature_file,
+		'filter_key': filter_key,
+		'drop_key': drop_key,
+		'label_key': label_key,
+		'batch_key': batch_key,
+		'label_file': label_file,
+		'gene_file': gene_file,
+		'layer_key': layer_key if 'layer_key' in locals() else None
+	}
+	if feature_file.endswith('.pkl') or feature_file.endswith('.h5ad'):
+		return data_info_dict
 	sys.exit('wrong file suffix')
 
 def read_singlecell_data(dname, data_dir, ontology_dir, nsample = 500000000, read_tissue = False, exclude_non_leaf_ontology = True):

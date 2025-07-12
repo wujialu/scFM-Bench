@@ -174,7 +174,7 @@ cython_debug/
 **/.vscode/
 
 # customized 
-figures/
+figures*/
 output*/
 **/*result*/
 **/logs/
@@ -195,8 +195,11 @@ scCello/
 **/_*.py
 move_files.sh
 *.slurm
+**/*.png
+**/gene_embs
 
 # except
 !**/data/.gitkeep
 !**/output/.gitkeep
 !data/**/*.py
+!**/sccello/data/

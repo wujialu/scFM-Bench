@@ -3,8 +3,9 @@ num_workers=4
 dataset_type=reference
 # dataset_type=query
 data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/datasets
-model_dir=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights
-output_folder=/home/wujialu/scFM-Bench/output
+model_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/weights
+output_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/output
+# output_folder=/home/wujialu/scFM-Bench/output
 
 # dataset_name=Tabula_Sapiens_all
 # label_col=cell_ontology_class_new
@@ -23,7 +24,7 @@ output_folder=/home/wujialu/scFM-Bench/output
 # scvi_ref_path=./output/${ref_dataset_name}/scVI
 
 dataset_name=AIDA_v2_new
-label_col=cell_type_ontology_term_id # 32 cell types
+label_col=cell_type # 32 cell types
 batch_col=donor_id  # 121 donors
 save_ext=h5ad
 ref_dataset_name=Tabula_Sapiens_all
@@ -47,13 +48,15 @@ batch_size=16
 data_is_raw=1
 pre_normalized=F
 normalize_total=1e4
+pass_cell_cls=1
+normalize=1
 
-for model_name in LangCell # HVG Harmony scVI scGPT Geneformer scBERT UCE xTrimoGene
+for model_name in scBERT # HVG Harmony scVI scGPT Geneformer scBERT UCE xTrimoGene scCello
 do
     CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
         --num_workers ${num_workers} \
         --data_folder ${data_folder} \
-        --model_dir ${model_dir} \
+        --model_folder ${model_folder} \
         --dataset_type ${dataset_type} \
         --ref_dataset_name ${ref_dataset_name} --ref_batch_col ${ref_batch_col} \
         --scvi_ref_path ${scvi_ref_path} \
@@ -65,5 +68,7 @@ do
         --model_name ${model_name} \
         --pre_normalized ${pre_normalized} \
         --data_is_raw ${data_is_raw} --normalize_total ${normalize_total} \
-        --output_folder ${output_folder}
+        --output_folder ${output_folder} \
+        --pass_cell_cls ${pass_cell_cls} \
+        --normalize ${normalize}
 done

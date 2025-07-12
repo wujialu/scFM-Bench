@@ -45,15 +45,17 @@ if __name__ == "__main__":
     label_key = dh.META_[dataset]["cell_ontology_id"]
     layer_key = dh.META_[dataset]["layer_key"]
 
-    
     adata = sc.read(dh.DATA_RAW_[dataset], first_column_names=True)
-    for model in ["scVI", "Geneformer", "scGPT", "UCE", "xTrimoGene", "LangCell", "Seurat_cca", "Harmony"]:
+    # for model in ["scVI", "Geneformer", "scGPT", "UCE", "xTrimoGene", "LangCell", "Seurat_cca", "Harmony"]:
+    for model in os.listdir(os.path.join(dh.RES_DIR, dataset, layer_key)):
         embedding_key = f"X_{model.lower()}"
         if model.lower() == "xtrimogene":
             embedding_file = "mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
+        elif model.lower() == "scvi":
+            embedding_file = f"cell_emb_{batch_key}.npy"
         else:
             embedding_file = "cell_emb.npy"
-        output_dir = os.path.join(dh.RES_DIR, dataset, model)
+        output_dir = os.path.join(dh.RES_DIR, dataset, layer_key, model)
         embedding_path = os.path.join(output_dir, embedding_file)
         adata.obsm[embedding_key] = np.load(embedding_path)
 
@@ -90,11 +92,12 @@ if __name__ == "__main__":
             ignore_.append(celltype)
             used_labels.remove(celltype)
 
+    os.makedirs(f"./reference_graph/{dataset}", exist_ok=True)
     pca_graph = f"./reference_graph/{dataset}/concensus_df_pca.csv"
     count_graph = f"./reference_graph/{dataset}/concensus_df_count.csv"
     if os.path.isfile(pca_graph) and os.path.isfile(count_graph):
-        concensus_df_pca = pd.read_csv(pca_graph)
-        concensus_df_count = pd.read_csv(count_graph)
+        concensus_df_pca = pd.read_csv(pca_graph, index_col=0)
+        concensus_df_count = pd.read_csv(count_graph, index_col=0)
     else:
         for BATCH_ in tqdm(adata.obs[batch_key].unique()):
             adata_batch = adata[adata.obs[batch_key] == BATCH_].copy()
@@ -135,11 +138,11 @@ if __name__ == "__main__":
 
         df_combined = pd.concat(_collect_pca_.values(), axis=0, sort=False)
         concensus_df_pca = df_combined.groupby(df_combined.index).mean()
-        concensus_df_pca.to_csv(pca_graph, index=False)
+        concensus_df_pca.to_csv(pca_graph)
         
         df_combined = pd.concat(_collect_count_.values(), axis=0, sort=False)
         concensus_df_count = df_combined.groupby(df_combined.index).mean()
-        concensus_df_pca.to_csv(count_graph, index=False)
+        concensus_df_pca.to_csv(count_graph)
 
     # NOTE: there are indeed some NaNs in the concensus_df_count, concensus_df_pca,
     # because there might not exist a batch including both (cell type A, cell type Y)
@@ -181,7 +184,6 @@ if __name__ == "__main__":
     
     for _obsm in _obsm_list:
         adata_df = adata_concensus(adata, _obsm, label_key)
-        
         _row_df = pd.DataFrame(
             {
                 "Rank-Counts": rank_diff(adata_df, concensus_df_count),

@@ -1,7 +1,10 @@
 import os
 repo_dir = os.path.dirname(__file__)
-data_dir = os.path.join(repo_dir, "../data/")
-print(repo_dir, data_dir)
+# data_dir = os.path.join(repo_dir, "../data/")
+data_dir = "/mnt/nvme/extra_data/wujialu/scFM-Bench/data/"
+cell_emb_dir = "/mnt/nvme/extra_data/wujialu/scFM-Bench/output"
+print("Loading data from:", data_dir)
+print("Loading cell embeddings from:", cell_emb_dir)
 
 # scrna_data_dir = data_dir + 'OnClass_data_public/scRNA_data/'
 scrna_data_dir = data_dir

@@ -1,16 +1,15 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+import sys
+sys.path.insert(0, "./sc_foundation_evals")
 import argparse
 from loggers import init_logger
 import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy import sparse
-import matplotlib.pyplot as plt
-import scvi
-from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward
+from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward, sccello_forward
 from sc_foundation_evals import data
-import harmonypy as hm
 import subprocess
 import time
 from functools import wraps
@@ -29,7 +28,7 @@ warnings.filterwarnings("ignore")
 
 def calculate_params(model):
     total_params = sum(
-	param.numel() for param in model.parameters()
+	    param.numel() for param in model.parameters()
     )
     return total_params
 
@@ -37,6 +36,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--data_folder', type=str, default='./data/datasets')
+    parser.add_argument('--model_folder', type=str, default='./data/weights')
     parser.add_argument('--dataset_name', type=str, default='pancreas_scib')
     parser.add_argument('--dataset_type', type=str, default='reference')
     
@@ -177,6 +177,7 @@ def run_geneformer(args):
                                   batch_size= args.batch_size, 
                                   layer = -1)
 
+
 @monitor_inference_resources
 def run_scgpt(args):
     scgpt_model = scgpt_forward.scGPT_instance(saved_model_path = args.model_dir,
@@ -206,8 +207,7 @@ def run_scgpt(args):
                                normalize_total=args.normalize_total if args.data_is_raw else 0,
                                counts_layer = args.layer_key, 
                                n_bins = args.n_bins,
-                               n_hvg = False, #! change1
-                               )
+                               n_hvg = False) #! change1
     
     #! manually subset_hvg (保证留下TF gene)
     input_data._subset_hvg(n_hvg=args.n_hvg, data_is_raw=args.data_is_raw, TF_name=args.TF_name, selected_genes=args.selected_genes)
@@ -247,7 +247,7 @@ def run_xtrimo(args):
     
     columns = adata.var[args.gene_col].tolist()
     X_df = pd.DataFrame(adata.X.A if sparse.issparse(adata.X) else adata.X, index=adata.obs.index.tolist(), columns=columns) # read from csv file
-    gene_list_df = pd.read_csv('./data/weights/scFoundation/OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
+    gene_list_df = pd.read_csv(args.model_path + '/OS_scRNA_gene_index.19264.tsv', header=0, delimiter='\t')
     gene_list = list(gene_list_df['gene_name'])
     X_df, to_fill_columns, var = main_gene_selection(X_df, gene_list)
     
@@ -265,8 +265,8 @@ def run_xtrimo(args):
 
     adata.write_h5ad(os.path.join(preprocessed_dir, f"{dataset_name}.h5ad"))
     
-    # os.chdir("./xTrimoGene/model")
-    command = ["python3", "./xTrimoGene/model/get_embedding.py",
+    os.chdir("./xTrimoGene/model")
+    command = ["python3", "get_embedding.py",
                "--task_name", "mapping",
                "--input_type", args.input_type,
                "--output_type", args.output_type,
@@ -274,6 +274,7 @@ def run_xtrimo(args):
                "--tgthighres", args.tgthighres,
                "--data_path", preprocessed_path,
                "--save_path", args.output_dir,
+               "--model_path", args.model_path,
                "--pre_normalized", args.pre_normalized,
                "--version", args.version,
                "--raw_data_path", os.path.join(preprocessed_dir, f"{dataset_name}.h5ad"),
@@ -281,6 +282,7 @@ def run_xtrimo(args):
                ]
     
     subprocess.run(command)
+
 
 @monitor_inference_resources
 def run_langcell(args):
@@ -291,7 +293,7 @@ def run_langcell(args):
                                                         num_workers = args.num_workers, 
                                                         explicit_save_dir = True)
     langcell_model.load_pretrained_model()
-    langcell_model.load_tokenizer()
+    langcell_model.load_text_tokenizer()
     langcell_model.load_vocab(args.dict_dir)
     total_params = calculate_params(langcell_model.model)
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
@@ -308,37 +310,70 @@ def run_langcell(args):
                                 include_zero_genes = True) #! change1
     langcell_model.get_dataloader()
     
-    langcell_model.extract_attn_weights(data = input_data, 
-                                        layer = -1)
+    langcell_model.extract_attn_weights(data = input_data, layer = -1)
+
+
+@monitor_inference_resources
+def run_sccello(args):
+    sccello_model = sccello_forward.scCello_instance(saved_model_path = args.model_dir,
+                                                     batch_size = args.batch_size,
+                                                     save_dir = args.output_dir,
+                                                     num_workers = args.num_workers, 
+                                                     explicit_save_dir = True)
+    sccello_model.load_pretrained_model()
+    sccello_model.load_vocab(args.dict_dir)
+    total_params = calculate_params(sccello_model.model)
+    print("Total params for the current model: {:.1f} million".format(total_params/1e6))
+
+    dataset_name = os.path.basename(args.adata_path).split(".")[0]
+    
+    processed_adata_path = os.path.join(args.preprocessed_dir, f"{dataset_name}.{args.save_ext}")
+    input_data = data.InputData(adata_dataset_path = processed_adata_path)
+    # sccello_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset")
+    sccello_model.tokenize_data(adata_path = processed_adata_path,
+                                 dataset_path = args.preprocessed_dir,
+                                 cell_type_col = args.label_col,
+                                 data_is_raw = args.data_is_raw,
+                                 include_zero_genes = False)
+    sccello_model.get_dataloader()
+    
+    sccello_model.extract_attn_weights(data = input_data, layer = -1)
 
 
 def main(args):
     args.logger.info(f"Extract attention weights from last layer using {args.model_name}")
         
     if args.model_name.lower() == "geneformer":
-        args.model_dir = "./data/weights/Geneformer/default/12L"
-        args.dict_dir = "./data/weights/Geneformer/dicts"
-        args.preprocessed_dir = f"./data/datasets/geneformer/{args.dataset_name}/{args.layer_key}"
+        args.model_dir = args.model_folder + "/Geneformer/default/12L"
+        args.dict_dir = args.model_folder + "/Geneformer/dicts"
+        args.preprocessed_dir = os.path.dirname(args.adata_path) + f"/geneformer/"
         if not os.path.exists(args.preprocessed_dir):
             os.makedirs(args.preprocessed_dir)
         run_geneformer(args)
         
     elif args.model_name.lower() == "scgpt":
-        args.model_dir = "./data/weights/scgpt/scGPT_human"
+        args.model_dir = args.model_folder + "/scgpt/scGPT_human"
         run_scgpt(args)
     
     elif args.model_name.lower() == "uce":
         args.logger.error(f"UCE model is not supported yet")
 
     elif args.model_name.lower() == "xtrimogene":
+        args.model_path = args.model_folder + "/scFoundation"
         run_xtrimo(args)
     
     elif args.model_name.lower() == "langcell":
-        args.model_dir = "./data/weights/LangCell"
-        args.tokenizer_dir = "./data/weights/LangCell/tokenizer/BiomedBERT"
-        args.dict_dir = "./data/weights/Geneformer/dicts"
-        args.preprocessed_dir = f"./data/datasets/geneformer/{args.dataset_name}/{args.layer_key}"
+        args.model_dir = args.model_folder + "/LangCell"
+        args.tokenizer_dir = args.model_folder + "/LangCell/tokenizer/BiomedBERT"
+        args.dict_dir = args.model_folder + "/Geneformer/dicts"
+        args.preprocessed_dir = os.path.dirname(args.adata_path) + f"/geneformer/"
         run_langcell(args)
+
+    elif args.model_name.lower() == "sccello":
+        args.model_dir = args.model_folder + "/scCello"
+        args.dict_dir = args.model_folder + "/Geneformer/dicts"
+        args.preprocessed_dir = os.path.dirname(args.adata_path) + f"/geneformer/"
+        run_sccello(args)
 
     else:
         args.logger.error(f"The model name {args.model_name} is invalid")
@@ -366,12 +401,12 @@ if __name__ == "__main__":
     # )
 
     args.TF_name = 'BHLHE40'
-    args.n_hvg = 1024
+    args.n_hvg = 1200
     args.selected_genes_file = os.path.join(args.data_folder, args.dataset_name, f"{args.TF_name}_selected_gene_list_{args.n_hvg}.txt")
     if os.path.isfile(args.selected_genes_file):
         args.selected_genes = np.genfromtxt(args.selected_genes_file, dtype=str)
         print("Number of selected genes:", len(args.selected_genes))
     else:
-        args.selected_genes = None  # use scgpt to generate 1024 HVGs as selected_genes (+[TF_name])
+        args.selected_genes = None  # use scgpt to generate 1200 HVGs as selected_genes (+[TF_name])
 
     main(args)

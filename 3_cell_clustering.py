@@ -8,6 +8,7 @@
 
 import os
 import argparse
+import torch
 from sc_foundation_evals import utils
 import numpy as np
 import pandas as pd
@@ -145,11 +146,13 @@ if __name__ == "__main__":
 
     args.adata_path = os.path.join(args.data_folder, f"{args.dataset_name}.h5ad")
     args.embedding_key = f"X_{args.model_name.lower()}"
-    args.output_dir = os.path.join(args.output_folder, args.dataset_name, args.model_name)
+    args.output_dir = os.path.join(args.output_folder, args.dataset_name, args.layer_key, args.model_name)
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
     if args.model_name.lower() == "xtrimogene":
         args.embedding_file = "mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
+    elif args.model_name.lower() == "scvi":
+        args.embedding_file = f"cell_emb_{args.batch_col}.npy"
     args.embedding_path = os.path.join(args.output_dir, args.embedding_file)
     
     main(args)

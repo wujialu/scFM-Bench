@@ -43,6 +43,7 @@ token_dictionary['<cls>'] = len(token_dictionary)
 
 logger = logging.get_logger(__name__)
 
+TRUNCATE_LENGTH = 2048
 
 class BertEmbeddings(nn.Module):
     """Construct the embeddings from word and position embeddings."""
@@ -950,7 +951,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
-class LangCellPrecollatorForGeneAndCellClassification(PrecollatorForGeneAndCellClassification):
+class PrecollatorForGeneAndCellClassificationWithCLS(PrecollatorForGeneAndCellClassification):
     cls_token = "<cls>"
     cls_token_id = token_dictionary.get("<cls>")
     all_special_ids = [
@@ -969,25 +970,30 @@ class LangCellPrecollatorForGeneAndCellClassification(PrecollatorForGeneAndCellC
     def __len__(self):
         return len(self.token_dictionary)
     
-class LangCellDataCollatorForCellClassification(DataCollatorForCellClassification):
+class DataCollatorForCellClassificationWithCLS(DataCollatorForCellClassification):
     def __init__(self, add_cls=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_cls = add_cls
-        self.tokenizer = LangCellPrecollatorForGeneAndCellClassification()
+        self.tokenizer = PrecollatorForGeneAndCellClassificationWithCLS()
 
     def _prepare_batch(self, features):
         max_length = 0
-        if self.add_cls:
-            for i in range(len(features)):
-                features[i]['input_ids'] = ([int(self.tokenizer.cls_token_id)] + features[i]['input_ids'])[:2048]
-                max_length = max(max_length, len(features[i]['input_ids']))
-        
+        for i in range(len(features)):
+            if self.add_cls:
+                features[i]['input_ids'] = ([int(self.tokenizer.cls_token_id)] + features[i]['input_ids'])[:TRUNCATE_LENGTH]
+            max_length = max(max_length, len(features[i]['input_ids'])) 
+            
         # transform to dict
         features = {key: [example[key] for example in features] for key in features[0].keys()}
         if features.get("sorted_indices", None):
-            features["sorted_indices"] = [
-                [-1] + seq[:2048] + [-1] * (max_length - len(seq)) for seq in features["sorted_indices"]
-            ]
+            if self.add_cls:
+                features["sorted_indices"] = ([
+                    ([-1] + ori_indices + [-1] * (max_length - len(ori_indices) - 1))[:TRUNCATE_LENGTH] for ori_indices in features["sorted_indices"]
+                ])
+            else:
+                features["sorted_indices"] = ([
+                    (ori_indices + [-1] * (max_length - len(ori_indices)))[:TRUNCATE_LENGTH] for ori_indices in features["sorted_indices"]
+                ])
             
         batch = super()._prepare_batch(features)
         

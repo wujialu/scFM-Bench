@@ -3,8 +3,8 @@ import pandas as pd
 import json
 from config import optuna_result_dir
 
-model_ls = ["scVI", "Geneformer", "LangCell", "scGPT", "xTrimoGene", "UCE"]
-dnames = ["HLCA_core", "Tabula_Sapiens_all"]
+model_ls = ["scVI", "Harmony", "Seurat_cca", "Geneformer", "LangCell", "scGPT", "xTrimoGene", "UCE", "scCello"]
+dnames = ["HLCA_core", "Tabula_Sapiens_all", "AIDA_v2_new"]
 results = []
 for dname in dnames:
     for model in model_ls:

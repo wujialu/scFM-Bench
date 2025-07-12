@@ -222,7 +222,8 @@ class scBERT_instance():
 
         return True
     
-    def preprocess_data(self, adata_path, layer_key, gene_col, data_is_raw=True):
+    def preprocess_data(self, adata_path, layer_key, gene_col, data_is_raw=True,
+                        min_cells: int = 10, min_genes: int = 25):
         panglao = sc.read_h5ad(os.path.join(self.saved_model_path, 
                                             self.model_files['ref_data']))
         sc.pp.filter_genes(panglao, min_cells=0.05*len(panglao))
@@ -259,7 +260,11 @@ class scBERT_instance():
                 "The input data seems to be already log1p transformed. "
                 "Set `log1p=False` to avoid double log1p transform."
             )
-        sc.pp.filter_cells(new, min_genes=200)
+        # sc.pp.filter_cells(new, min_genes=200)
+        sc.pp.filter_cells(new, min_genes=min_genes)
+        log.info(f"After filter cells: {adata.X.shape}")
+        sc.pp.filter_genes(new, min_cells=min_cells)
+        log.info(f"After filter cells: {adata.X.shape}")
         sc.pp.normalize_total(new, target_sum=1e4)
         sc.pp.log1p(new, base=2)
 

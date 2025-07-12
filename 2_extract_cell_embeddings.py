@@ -1,5 +1,7 @@
 import os
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+import sys
+sys.path.insert(0, "./sc_foundation_evals")
 import argparse
 from loggers import init_logger
 import numpy as np
@@ -7,7 +9,7 @@ import pandas as pd
 import scanpy as sc
 import scipy.sparse as sp
 import scvi
-from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward, scbert_forward
+from sc_foundation_evals import geneformer_forward, scgpt_forward, langcell_forward, scbert_forward, sccello_forward
 from sc_foundation_evals import data
 import harmonypy as hm
 import subprocess
@@ -31,7 +33,7 @@ def args_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--data_folder', type=str, default='./data/datasets')
-    parser.add_argument('--model_dir', type=str, default='./data/weights')
+    parser.add_argument('--model_folder', type=str, default='./data/weights')
     parser.add_argument('--dataset_name', type=str, default='pancreas_scib')
     parser.add_argument('--dataset_type', type=str, default='reference')
     parser.add_argument('--ref_dataset_name', type=str, default='Tabula_Sapiens_all')
@@ -73,6 +75,10 @@ def args_parser():
     # params for scBERT
     parser.add_argument("--bin_num", type=int, default=5, help='Number of bins.')
     parser.add_argument("--gene_num", type=int, default=16906, help='Number of genes.')
+
+    # params for scCello & LangCell (use contrastive learning)
+    parser.add_argument("--normalize", type=int, default=0)
+    parser.add_argument("--pass_cell_cls", type=int, default=0)
 
     args = parser.parse_args()
     return args
@@ -255,6 +261,7 @@ def run_geneformer(args):
     args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
     np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
     
+
 @monitor_inference_resources
 def run_scgpt(args):
     scgpt_model = scgpt_forward.scGPT_instance(saved_model_path = args.model_dir,
@@ -295,6 +302,7 @@ def run_scgpt(args):
     args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
     np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
     
+
 @monitor_inference_resources
 def run_uce(args):
     os.chdir("./UCE")
@@ -311,6 +319,7 @@ def run_uce(args):
                "--skip", "1"] 
     
     subprocess.run(command)
+
 
 @monitor_inference_resources
 def run_xtrimo(args):
@@ -362,6 +371,7 @@ def run_xtrimo(args):
     
     subprocess.run(command)
 
+
 @monitor_inference_resources
 def run_langcell(args):
     langcell_model = langcell_forward.Langcell_instance(saved_model_path = args.model_dir,
@@ -371,25 +381,25 @@ def run_langcell(args):
                                                         num_workers = args.num_workers, 
                                                         explicit_save_dir = True)
     langcell_model.load_pretrained_model()
-    langcell_model.load_tokenizer()
+    langcell_model.load_text_tokenizer()
     total_params = calculate_params(langcell_model.model)
     print("Total params for the current model: {:.1f} million".format(total_params/1e6))
 
     dataset_name = os.path.basename(args.adata_path).split(".")[0]
-    # langcell_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset")
     processed_adata_path = os.path.join(args.preprocessed_dir, f"{dataset_name}.{args.save_ext}")
+    input_data = data.InputData(adata_dataset_path = processed_adata_path)
+
+    # langcell_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset")
     langcell_model.tokenize_data(adata_path = processed_adata_path,
                                  dataset_path = args.preprocessed_dir,
                                  cell_type_col = args.label_col,
                                  data_is_raw = args.data_is_raw,
                                  include_zero_genes = False)
     langcell_model.get_dataloader()
-    
-    # sc.read(.h5ad or .loom)
-    processed_adata_path = os.path.join(args.preprocessed_dir, f"{dataset_name}.{args.save_ext}")
-    input_data = data.InputData(adata_dataset_path = processed_adata_path)
-    
-    langcell_model.extract_embeddings(data = input_data)
+  
+    langcell_model.extract_embeddings(data = input_data,
+                                      pass_cell_cls = bool(args.pass_cell_cls),
+                                      normalize = bool(args.normalize))
     cell_embeddings = langcell_model.cell_embeddings
     args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
     np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
@@ -422,8 +432,33 @@ def run_scbert(args):
 
 
 def run_sccello(args):
-    #TODO: add the implementation of scCello
-    pass
+    sccello_model = sccello_forward.scCello_instance(saved_model_path = args.model_dir,
+                                                     batch_size = args.batch_size,
+                                                     save_dir = args.output_dir,
+                                                     num_workers = args.num_workers, 
+                                                     explicit_save_dir = True)
+    sccello_model.load_pretrained_model()
+    total_params = calculate_params(sccello_model.model)
+    print("Total params for the current model: {:.1f} million".format(total_params/1e6))
+
+    dataset_name = os.path.basename(args.adata_path).split(".")[0]
+    
+    processed_adata_path = os.path.join(args.preprocessed_dir, f"{dataset_name}.{args.save_ext}")
+    input_data = data.InputData(adata_dataset_path = processed_adata_path)
+    # sccello_model.load_tokenized_dataset(os.path.join(args.preprocessed_dir, f"{dataset_name}.dataset")
+    sccello_model.tokenize_data(adata_path = processed_adata_path,
+                                 dataset_path = args.preprocessed_dir,
+                                 cell_type_col = args.label_col,
+                                 data_is_raw = args.data_is_raw,
+                                 include_zero_genes = False)
+    sccello_model.get_dataloader()
+    
+    sccello_model.extract_embeddings(data = input_data,
+                                     pass_cell_cls = bool(args.pass_cell_cls),
+                                     normalize = bool(args.normalize))
+    cell_embeddings = sccello_model.cell_embeddings
+    args.logger.info(f"The shape of the extracted cell embeddings: {cell_embeddings.shape}")  
+    np.save(os.path.join(args.output_dir, "cell_emb.npy"), cell_embeddings)
 
 
 def main(args):
@@ -447,39 +482,49 @@ def main(args):
             run_scvi(args)
         
     elif args.model_name.lower() == "geneformer":
-        args.dict_dir = os.path.join(args.model_dir, "Geneformer/dicts")
-        args.model_dir = os.path.join(args.model_dir, "Geneformer/default/12L")
+        args.model_dir = os.path.join(args.model_folder, "Geneformer/default/12L")
+        args.dict_dir = os.path.join(args.model_folder, "Geneformer/dicts")
         args.preprocessed_dir = os.path.join(args.data_folder, f"geneformer/{args.dataset_name}/{args.layer_key}")
         if not os.path.exists(args.preprocessed_dir):
             os.makedirs(args.preprocessed_dir)
         run_geneformer(args)
         
     elif args.model_name.lower() == "scgpt":
-        args.model_dir = os.path.join(args.model_dir, "scgpt/scGPT_human")
+        args.model_dir = os.path.join(args.model_folder, "scgpt/scGPT_human")
         args.n_hvg = 1200
         run_scgpt(args)
     
     elif args.model_name.lower() == "uce":
-        args.model_loc = os.path.join(args.model_dir, "UCE/33l_8ep_1024t_1280.torch")
+        args.model_loc = os.path.join(args.model_folder, "UCE/33l_8ep_1024t_1280.torch")
         args.output_dir = args.output_dir + "/"
         run_uce(args)
     
     elif args.model_name.lower() == "xtrimogene":
-        args.model_path = os.path.join(args.model_dir, "scFoundation")
+        args.model_path = os.path.join(args.model_folder, "scFoundation")
         run_xtrimo(args)
 
+    elif args.model_name.lower() == "langcell":
+        args.model_dir = os.path.join(args.model_folder, "LangCell")
+        args.tokenizer_dir = os.path.join(args.model_folder, "LangCell/tokenizer/BiomedBERT")
+        args.preprocessed_dir = os.path.join(args.data_folder, f"geneformer/{args.dataset_name}/{args.layer_key}")
+        if args.pass_cell_cls:
+            args.output_dir += "_passcellcls"
+        if args.normalize:
+            args.output_dir += "_normalized"
+        run_langcell(args)
+
     elif args.model_name.lower() == "scbert":
-        args.model_dir = os.path.join(args.model_dir, "scBERT")
+        args.model_dir = os.path.join(args.model_folder, "scBERT")
         run_scbert(args)
     
     elif args.model_name.lower() == "sccello":
-        run_sccello(args)
-
-    elif args.model_name.lower() == "langcell":
-        args.model_dir = os.path.join(args.model_dir, "LangCell")
-        args.tokenizer_dir = os.path.join(args.model_dir, "tokenizer/BiomedBERT")
+        args.model_dir = os.path.join(args.model_folder, "scCello")
         args.preprocessed_dir = os.path.join(args.data_folder, f"geneformer/{args.dataset_name}/{args.layer_key}")
-        run_langcell(args)
+        if args.pass_cell_cls:
+            args.output_dir += "_passcellcls"
+        if args.normalize:
+            args.output_dir += "_normalized"
+        run_sccello(args)
     
     elif args.model_name.lower() == "harmony":
         args.n_hvg = 2000

@@ -6,20 +6,18 @@ import pandas as pd
 import os
 from OnClass.OnClassModel import OnClassModel
 from utils import read_ontology_file, read_data, make_folder, read_data_file, read_data, parse_pkl, SplitTrainTest, MapLabel2CL, evaluate, MyDataset, seed_everything
-from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir
+from config import ontology_data_dir, scrna_data_dir, result_dir, optuna_result_dir, cell_emb_dir
 from torch.utils.data import DataLoader
 import json
 
-if len(sys.argv) <= 2:
-	device = sys.argv[1]
-	model = None
-	dnames = sys.argv[2]
-	dnames = dnames.split(",")
+device = sys.argv[1]
+model = sys.argv[2]
+dnames = sys.argv[3]
+if len(sys.argv) > 4:
+	batch_col = sys.argv[4]
 else:
-	device = sys.argv[1]
-	model = sys.argv[2]
-	dnames = sys.argv[3]
-	dnames = dnames.split(",")
+	batch_col = None
+dnames = dnames.split(",")
 
 niter = 5 # 5-fold cross-validation
 batch_correct = True
@@ -38,20 +36,30 @@ if model is not None:
 	output_dir = make_folder(result_dir+f'/{model}/{celltype_embed}_dot_product')
 	if model == "xTrimoGene":
 		emb_file = f"{model}/mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
+	elif model == "scVI" and batch_col is not None:
+		emb_file = f"{model}/cell_emb_{batch_col}.npy"
 	else:
 		emb_file = f"{model}/cell_emb.npy"
 else:
-    output_dir = make_folder(result_dir+f'/Raw')
+	output_dir = make_folder(result_dir+f'/Raw')
+	emb_file = None
+
 
 def main(model_to_params):
 	for dname in dnames:
 		params = model_to_params[dname][model]
 		lr, l2 = float(params["lr"]), float(params["l2"])
-		emb_dir = f"../output/{dname}"
 		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file("cl", ontology_data_dir)	
 	
 		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
-		feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file = read_data_file(dname, scrna_data_dir)
+		data_info_dict = read_data_file(dname, scrna_data_dir)
+		feature_file = data_info_dict['feature_file']
+		label_file = data_info_dict['label_file']
+		gene_file = data_info_dict['gene_file']
+		filter_key = data_info_dict['filter_key']
+		label_key = data_info_dict['label_key']
+		layer_key = data_info_dict['layer_key']
+		emb_dir = os.path.join(cell_emb_dir, dname, layer_key)
 
 		if feature_file.endswith('.pkl'):
 			feature, label, genes = parse_pkl(feature_file, label_file, gene_file, exclude_non_leaf_ontology = True, cell_ontology_file = cell_type_network_file)

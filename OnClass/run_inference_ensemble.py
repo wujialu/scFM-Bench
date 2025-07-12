@@ -6,10 +6,8 @@ import pandas as pd
 import os
 from OnClass.OnClassModel import OnClassModel
 from utils import read_ontology_file, make_folder, read_data_file, read_exclude_data, parse_pkl, MapLabel2CL, MyDataset, seed_everything
-from config import ontology_data_dir, scrna_data_dir, result_dir
+from config import ontology_data_dir, scrna_data_dir, result_dir, cell_emb_dir
 from torch.utils.data import DataLoader
-import torch
-import random
 from sklearn.metrics import f1_score
 import json
 import itertools
@@ -45,7 +43,7 @@ def main(dname, model_to_params, model_list, iter, unseen_ratio=0):
 	pred_logits = {}
 	pred_labels = {}
 	for model in model_list:
-		output_dir = make_folder(result_dir+f'/Raw')
+		output_dir = make_folder(result_dir+f'/{model}/onclass_dot_product')
 
 		params = model_to_params[source_dname][model]
 		lr, l2 = float(params["lr"]), float(params["l2"])
@@ -60,20 +58,28 @@ def main(dname, model_to_params, model_list, iter, unseen_ratio=0):
 			else: # overlapped of remained cell types between HLCA and Tabula (#class=14)
 				target_labels = {'CL:0000860', 'CL:0002543', 'CL:0000875', 'CL:0000077', 'CL:0002062', 'CL:0000786', 'CL:0000186', 
 								'CL:0002138', 'CL:0002063', 'CL:0000097', 'CL:0000158', 'CL:0002399', 'CL:0002144', 'CL:0000037'}
-		emb_dir = f"../output/{dname}"
+		
+		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file(dname, ontology_data_dir)
+		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
+		data_info_dict = read_data_file(dname, scrna_data_dir)
+		feature_file = data_info_dict['feature_file']
+		label_file = data_info_dict['label_file']
+		gene_file = data_info_dict['gene_file']
+		filter_key = data_info_dict['filter_key']
+		label_key = data_info_dict['label_key']
+		layer_key = data_info_dict['layer_key']
+		batch_key = data_info_dict['batch_key']
+		emb_dir = os.path.join(cell_emb_dir, dname, layer_key)
+
 		if model == "xTrimoGene":
 			emb_file = f"{model}/mapping_01B-resolution_singlecell_cell_embedding_t4.5_resolution.npy"
 		elif model == "scVI":
 			if cross_dataset:
 				emb_file = f"{model}_surgery/cell_emb.npy"
 			else:
-				emb_file = f"{model}/cell_emb.npy"
+				emb_file = f"{model}/cell_emb_{batch_key}.npy"
 		else:
 			emb_file = f"{model}/cell_emb.npy"
-		
-		cell_type_nlp_emb_file, cell_type_network_file, cl_obo_file = read_ontology_file(dname, ontology_data_dir)
-		OnClass_train_obj = OnClassModel(cell_type_nlp_emb_file = cell_type_nlp_emb_file, cell_type_network_file = cell_type_network_file, device=device)
-		feature_file, filter_key, drop_key, label_key, batch_key, label_file, gene_file = read_data_file(dname, scrna_data_dir, model=model)
 
 		if feature_file.endswith('.pkl'):
 			feature, label, genes = parse_pkl(feature_file, label_file, gene_file, exclude_non_leaf_ontology = True, cell_ontology_file = cell_type_network_file)
@@ -120,7 +126,8 @@ if __name__ == "__main__":
 	with open(params_file, "r") as f:
 		model_to_params = json.load(f)
 	
-	model_list = ["Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene"]
+	# six scFMs
+	model_list = ["Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene", "scCello"]
 	result = []
 	for dname in dnames:
 		for iter in range(niter):

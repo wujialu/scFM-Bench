@@ -10,7 +10,7 @@ import json
 
 # create cell ontology graph
 cell_type_network_file = os.path.join(ontology_data_dir, 'cl.ontology.new')
-distance_df = pd.read_csv("../data/OnClass_data_public/Ontology_data/cl.ontology.rwr.csv", index_col=0)
+distance_df = pd.read_csv(os.path.join(ontology_data_dir, "cl.ontology.rwr.csv"), index_col=0)
 G = networkx.DiGraph()
 fin = open(cell_type_network_file)
 for line in fin:
@@ -19,7 +19,12 @@ for line in fin:
 fin.close()
 
 # load prediction results
-model_list = ["scVI", "Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene", "Harmony", "Seurat_cca"]
+# model_list = ["scVI", "Harmony", "Seurat_cca", "Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene", "scCello"]
+model_list = ["LR_OvR", "scCello"]
+# model_list = [
+#     d for d in os.listdir(result_dir)
+#     if os.path.isdir(os.path.join(result_dir, d))
+# ]
 unseen_ratio_ls = [0]
 # unseen_ratio_ls = [0.1, 0.3, 0.5, 0.7, 0.9]
 test_ratio = 0.8
@@ -38,20 +43,18 @@ def main(model_to_params):
             cross_dataset = False
 
         for model in model_list:
-            params = model_to_params[source_dname][model]
-            lr, l2 = float(params["lr"]), float(params["l2"])
-            output_dir = result_dir + f'/{model}/{celltype_embed}_dot_product/{source_dname}/lr_{lr}_l2_{l2}_testset_{test_ratio}'
+            if "LR" not in model:
+                params = model_to_params[source_dname][model]
+                lr, l2 = float(params["lr"]), float(params["l2"])
+                output_dir = result_dir + f'/{model}/{celltype_embed}_dot_product/{source_dname}/lr_{lr}_l2_{l2}_testset_{test_ratio}'
+            else:
+                output_dir = result_dir + f'/{model}/{source_dname}/testset_{test_ratio}'
             for unseen_ratio in unseen_ratio_ls:
                 result_df = pd.DataFrame()
 
                 for iter in range(5):
                     if cross_dataset:
-                        pred_file = os.path.join(output_dir, str(iter), str(unseen_ratio), dname, "pred_label.csv")
-                        prev_pred_file = os.path.join(output_dir, str(iter), str(unseen_ratio), dname, "pred_label_nonleaf.csv")
-                        if os.path.isfile(prev_pred_file):
-                            os.rename(prev_pred_file, pred_file)
-                            break
-                                        
+                        pred_file = os.path.join(output_dir, str(iter), str(unseen_ratio), dname, "pred_label.csv")                                        
                         metrics_file = os.path.join(output_dir, str(iter), str(unseen_ratio), dname, "metrics.csv")
 
                     else:

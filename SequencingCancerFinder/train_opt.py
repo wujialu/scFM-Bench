@@ -1,5 +1,5 @@
 #%%
-from torch.utils.data import TensorDataset,DataLoader
+from torch.utils.data import TensorDataset, DataLoader
 import torch
 import pandas as pd 
 from models import model

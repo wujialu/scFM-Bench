@@ -31,7 +31,7 @@ def eval_scib_metrics(
                     "\nOverwriting calculation of neighbors with "
                     f"sc.pp.neighbors(adata, use_rep={embedding_key}).")
         adata.uns.pop("neighbors", None)
-        sc.pp.neighbors(adata, use_rep=embedding_key)
+        sc.pp.neighbors(adata, use_rep=embedding_key, method="rapids" if torch.cuda.is_available() else "umap")
         log.info("neighbors in adata.uns removed, new neighbors calculated: "
                  f"{adata.uns['neighbors']}")
 
@@ -40,17 +40,17 @@ def eval_scib_metrics(
     results_dict = dict()
 
     # 1. use the selected embedding_key for clustering
-    res_max, nmi_max, nmi_all = scib.metrics.clustering.opt_louvain(
+    scib.metrics.clustering.cluster_optimal_resolution(
         adata,
         label_key=label_key,
         cluster_key="cluster",
         use_rep=embedding_key, #! will be ignored if adata.uns['neighbors'] is defined
-        function=scib.metrics.nmi,
-        plot=False,
-        verbose=False,
-        inplace=True,
+        cluster_function=sc.tl.louvain,
+        metric=scib.metrics.nmi, # optimize the nmi metric
+        verbose=True,
         force=True,
-        )
+        flavor="rapids" if torch.cuda.is_available() else "vtraag",
+    )
     
     # 2. calculate the scib metrics for comparison
     results_dict["NMI_cluster/label"] = scib.metrics.nmi(
