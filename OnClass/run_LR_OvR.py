@@ -69,7 +69,7 @@ for iter in range(niter):
         # model = make_pipeline(StandardScaler(), LogisticRegression(multi_class='ovr', solver='liblinear'))
         # model = make_pipeline(StandardScaler(), LogisticRegression(multi_class='ovr', solver='saga', n_jobs=-1))
         #* cuml
-        model = make_pipeline(StandardScaler(), LogisticRegression(multi_class='ovr', penalty='l2'))
+        model = make_pipeline(StandardScaler(), LogisticRegression(penalty='l2'))
         model.fit(train_feature, train_Y)
 
         # predict on test set

@@ -4,9 +4,8 @@ library(Matrix)
 library(reticulate)
 library(future)
 
-
-options(future.globals.maxSize = 40 * 1024^3)
-plan("multicore", workers = 4)
+options(future.globals.maxSize = 120 * 1024^3)
+# plan("multicore", workers = 4)
 
 # 从命令行传入数据集路径
 args <- commandArgs(trailingOnly = TRUE)
@@ -53,20 +52,17 @@ obj <- IntegrateLayers(
 )
 cat("Integration completed.\n")
 
+# 保存 reference 对象
+output_dir <- paste0("output/", dataset_name, "/X/Seurat_cca")
+saveRDS(obj, file = paste0(output_dir, "/reference.rds"))
+
 # save integrated cell embeddings
 cca_mat <- obj@reductions$integrated.cca@cell.embeddings
 cca_mat <- as.matrix(cca_mat)
 cat("Integrated CCA matrix shape: ", dim(cca_mat), "\n")
-output_dir <- paste0("output/", dataset_name, "/X/Seurat_cca")
 output_file <- paste0(output_dir, "/cell_emb.npy")
 
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
 }
 np$save(output_file, cca_mat)
-
-# Rscript seurat_integration.R pancreas_scib batch
-# Rscript seurat_integration.R Immune_all_human_scib batch
-# Rscript seurat_integration.R HLCA_core dataset
-# Rscript seurat_integration.R Tabula_Sapiens_all tissue_in_publication
-# Rscript seurat_integration.R AIDA_v2_new donor_id

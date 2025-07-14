@@ -74,12 +74,12 @@ def main(args):
         adata.obsm[args.embedding_key] = np.load(args.embedding_path)
         
     #! calculate scib metrics
-    scib_metrics = utils.eval_scib_metrics(adata, 
-                                           batch_key=args.batch_col, 
-                                           label_key=args.label_col,
-                                           embedding_key=args.embedding_key)
-    scib_metrics.to_csv(os.path.join(args.output_dir, "clustering_metrics.csv"))
-    print("Successfully save scib metrics")
+    # scib_metrics = utils.eval_scib_metrics(adata, 
+    #                                        batch_key=args.batch_col, 
+    #                                        label_key=args.label_col,
+    #                                        embedding_key=args.embedding_key)
+    # scib_metrics.to_csv(os.path.join(args.output_dir, "clustering_metrics.csv"))
+    # print("Successfully save scib metrics")
     
     # umap visualization
     umap_file = os.path.join(args.output_dir, "X_umap.npy")

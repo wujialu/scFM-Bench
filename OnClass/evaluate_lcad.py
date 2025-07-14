@@ -20,7 +20,8 @@ fin.close()
 
 # load prediction results
 # model_list = ["scVI", "Harmony", "Seurat_cca", "Geneformer", "scGPT", "UCE", "LangCell", "xTrimoGene", "scCello"]
-model_list = ["LR_OvR", "scCello"]
+# model_list = ["LR_OvR"]
+model_list = ["scCello"]
 # model_list = [
 #     d for d in os.listdir(result_dir)
 #     if os.path.isdir(os.path.join(result_dir, d))
