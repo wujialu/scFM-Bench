@@ -46,23 +46,23 @@ seurat_obj <- ScaleData(seurat_obj)
 seurat_obj <- RunPCA(seurat_obj)
 cat("Calling IntegrateLayers...\n")
 obj <- IntegrateLayers(
-  object = seurat_obj, method = CCAIntegration,
-  orig.reduction = "pca", new.reduction = "integrated.cca",
+  object = seurat_obj, method = RPCAIntegration,
+  orig.reduction = "pca", new.reduction = "integrated.rpca",
   verbose = FALSE
 )
 cat("Integration completed.\n")
 
-# 保存 reference 对象
-output_dir <- paste0("output/", dataset_name, "/X/Seurat_cca")
-saveRDS(obj, file = paste0(output_dir, "/reference.rds"))
-
-# save integrated cell embeddings
-cca_mat <- obj@reductions$integrated.cca@cell.embeddings
-cca_mat <- as.matrix(cca_mat)
-cat("Integrated CCA matrix shape: ", dim(cca_mat), "\n")
-output_file <- paste0(output_dir, "/cell_emb.npy")
-
+output_dir <- paste0("/mnt/nvme/extra_data/wujialu/scFM-Bench/output", dataset_name, "/X/Seurat_rpca")
 if (!dir.exists(output_dir)) {
   dir.create(output_dir, recursive = TRUE)
 }
-np$save(output_file, cca_mat)
+
+# 保存 reference 对象
+saveRDS(obj, file = paste0(output_dir, "/reference.rds"))
+
+# save integrated cell embeddings
+rpca_mat <- obj@reductions$integrated.rpca@cell.embeddings
+rpca_mat <- as.matrix(rpca_mat)
+cat("Integrated rpca matrix shape: ", dim(rpca_mat), "\n")
+output_file <- paste0(output_dir, "/cell_emb.npy")
+np$save(output_file, rpca_mat)

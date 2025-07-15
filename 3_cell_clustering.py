@@ -101,7 +101,8 @@ def main(args):
         ax.set_title(args.model_name)
     plt.savefig(os.path.join(args.output_dir, "clustering_umap_celltype.png"), dpi=300, bbox_inches='tight')
     
-    ax = sc.pl.umap(adata, color=args.batch_col, show=False)
+    ax = sc.pl.umap(adata, color=args.batch_col, show=False,
+                    legend_loc='right margin', palette='turbo')
     if args.model_name == "xTrimoGene":
         ax.set_title("scFoundation")
     else:
@@ -118,7 +119,7 @@ def main(args):
     #                    'liver dendritic cell']
     # adata.obs['label_col_filtered'] = adata.obs[args.label_col].apply(lambda x: x if x in selected_labels else 'Others')
 
-    # onto_sp = pd.read_csv("/data2/zhuyiheng/wjl/scFoundation/data/OnClass_data_public/Ontology_data/cl.ontology.sp.csv", index_col=0)
+    # onto_sp = pd.read_csv("/mnt/nvme/extra_data/wujialu/scFM-Bench/data/OnClass_data_public/Ontology_data/cl.ontology.sp.csv", index_col=0)
     # target_celltype = 'CL:0000786'
     # co2distance = {x: onto_sp.loc[target_celltype, x] for x in adata.obs["cell_type_ontology_term_id"].unique()}
     # adata.obs["DAG distance"] = adata.obs.apply(lambda x: co2distance[x["cell_type_ontology_term_id"]], axis=1)
