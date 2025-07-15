@@ -182,7 +182,6 @@ wandb/
 xTrimoGene/
 test*
 **/data/
-**/*.ipynb
 **/*.npy
 **/*.tar.gz*
 TOSICA/
