@@ -9,15 +9,15 @@ import importlib
 import glob
 import os
 import numpy as np 
-from data_loaders import domian_loaders
+from SequencingCancerFinder.data_loaders import domain_loaders
 import itertools
 
 def main(args):
     # get dataloaders for training
-    train_loaders, feature_dim = domian_loaders.train_domian_loaders_l(args)
+    train_loaders, feature_dim = domain_loaders.train_domian_loaders_l(args)
     args.feature_dim = feature_dim
     print("Load data from {} domains for training".format(len(train_loaders)))
-    val_loaders = domian_loaders.val_domian_loaders_l(args)
+    val_loaders = domain_loaders.val_domian_loaders_l(args)
 
     # i/o for log output
     f_loss_io = open(os.path.join(args.output,f'{args.logs_name}_loss.txt'),'w')
