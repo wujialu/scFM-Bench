@@ -20,7 +20,7 @@ tgthighres=f1
 #! scGPT: assertion error of len_genes
 for model_name in scGPT xTrimoGene # Geneformer LangCell scCello 
 do
-    CUDA_VISIBLE_DEVICES=${device_id} python 4_extract_attn_weights.py \
+    CUDA_VISIBLE_DEVICES=${device_id} python -u 4_extract_attn_weights.py \
         --data_folder ${data_folder} \
         --model_folder ${model_folder} \
         --output_folder ${output_folder} \

@@ -1,4 +1,4 @@
-data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/datasets
+data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data
 # output_folder=/home/wujialu/scFM-Bench/output
 output_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/output
 
@@ -14,7 +14,7 @@ layer_key=counts # for HVG selection
 for model in scCello
 # for model in Seurat_cca Harmony #HVG scVI Geneformer scGPT UCE xTrimoGene LangCell
 do
-    python 3_cell_clustering.py \
+    python -u 3_cell_clustering.py \
         --data_folder ${data_folder} \
         --output_folder ${output_folder} \
         --model_name ${model} \

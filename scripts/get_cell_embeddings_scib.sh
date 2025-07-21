@@ -23,7 +23,7 @@ normalize=1
 
 for model_name in scCello #scBERT HVG Harmony scVI UCE xTrimoGene scVI Geneformer scGPT scCello 
 do
-    CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+    CUDA_VISIBLE_DEVICES=${device_id} python -u 2_extract_cell_embeddings.py \
         --data_folder ${data_folder} \
         --model_folder ${model_folder} \
         --dataset_type ${dataset_type} \

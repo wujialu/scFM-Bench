@@ -1,4 +1,4 @@
-data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data/datasets
+data_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/data
 output_folder=/mnt/nvme/extra_data/wujialu/scFM-Bench/output
 
 # dataset_name=HLCA_core # scbert, sccello
@@ -15,9 +15,9 @@ batch_col=donor_id
 
 layer_key=X # for HVG selection
 
-for model in HVG Seurat_cca Harmony scVI Geneformer scGPT UCE xTrimoGene LangCell #scBERT scCello
+for model in HVG Seurat_cca Harmony scVI Geneformer scGPT UCE xTrimoGene LangCell scCello #scBERT 
 do
-    python 3_cell_clustering.py \
+    python -u 3_cell_clustering.py \
         --data_folder ${data_folder} \
         --output_folder ${output_folder} \
         --model_name ${model} \
@@ -27,8 +27,20 @@ do
         --layer_key ${layer_key} 
 done
 
+# for model in HVG scVI Seurat_cca Harmony Geneformer scGPT UCE xTrimoGene LangCell scCello #scBERT 
+# do
+#     python -u 3.1_cell_clustering_case.py \
+#         --data_folder ${data_folder} \
+#         --output_folder ${output_folder} \
+#         --model_name ${model} \
+#         --dataset_name ${dataset_name} \
+#         --label_col ${label_col} \
+#         --batch_col ${batch_col} \
+#         --layer_key ${layer_key} 
+# done
+
 # repo_folder=$(dirname "$(dirname "$(readlink -f "$0")")")
 # echo $repo_folder
 # pushd $repo_folder/scGraph
-#     python scGraph_cl_ontology.py $dataset_name 
+#     python -u scGraph_cl_ontology.py $dataset_name 
 # popd

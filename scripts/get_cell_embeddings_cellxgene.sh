@@ -53,7 +53,7 @@ normalize=1
 
 for model_name in scBERT # HVG Harmony scVI scGPT Geneformer scBERT UCE xTrimoGene scCello
 do
-    CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+    CUDA_VISIBLE_DEVICES=${device_id} python -u 2_extract_cell_embeddings.py \
         --num_workers ${num_workers} \
         --data_folder ${data_folder} \
         --model_folder ${model_folder} \

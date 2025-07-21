@@ -45,7 +45,7 @@ do
     for dataset_file in $(ls ${tissue_data_folder}/*.h5ad)
     do
         dataset_name=$(basename ${dataset_file} .h5ad)
-        CUDA_VISIBLE_DEVICES=${device_id} python 2_extract_cell_embeddings.py \
+        CUDA_VISIBLE_DEVICES=${device_id} python -u 2_extract_cell_embeddings.py \
             --dataset_type ${dataset_type} \
             --data_folder ${tissue_data_folder} \
             --model_folder ${model_folder} \
