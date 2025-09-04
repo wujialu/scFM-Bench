@@ -7,7 +7,7 @@ from torch.utils.data import TensorDataset, DataLoader, SubsetRandomSampler
 import scanpy
 
 
-def train_domian_loaders_l(args):
+def train_domain_loaders_l(args):
     """
     Create training dataloaders
 
@@ -83,7 +83,7 @@ def train_domian_loaders_l(args):
         train_loader_l.append(train_loader)
     return train_loader_l, X.shape[1]
 
-def val_domian_loaders_l(args):
+def val_domain_loaders_l(args):
     """
     Create validating dataloaders
 

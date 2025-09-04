@@ -81,7 +81,7 @@ if adjust=="Y":
 if emb ==1:
     tr_ts_summary_path = "./emb_results"+feature+"/"+DRUG+"/"+SOFTWARE+"_train_test_summary_5folds_5seeds.txt"
 else:
-    tr_ts_summary_path = "./results"+feature+"/"+DRUG+"/"+SOFTWARE+"_train_test_summary_5folds_5seeds.txt"
+    tr_ts_summary_path = "./results"+feature+"/"+DRUG+"/"+"_train_test_summary_5folds_5seeds.txt"
 
 if cell_lines == "solid":
     tr_ts_summary_path = "./results_solid" + feature +"/"+DRUG+"/"+SOFTWARE+"_train_test_summary_5folds_5seeds_solid.txt"
@@ -385,10 +385,7 @@ for index, mbsize in enumerate(ls_mb_size):
                 return 0
             def transform(self, x):
                 return x
-        if emb ==1:
-            scalerTrain = Naivescaler()
-        else: 
-            scalerTrain = sk.StandardScaler()
+
             
         scalerTrain.fit(XTrainCombined.values)
         # N means Standardized
