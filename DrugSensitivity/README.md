@@ -4,6 +4,18 @@ Source code is from https://github.com/CompBioT/SCAD.
 
 SCAD is used to evaluate all these scFMs in the task of drug sensitivity prediction.
 
+## Data Download
+### Processed data
+The processed data used in this section can be downloaded from [figrshare](https://figshare.com/articles/dataset/scFoundation_Large_Scale_Foundation_Model_on_Single-cell_Transcriptomics_-_processed_datasets/24049200/3).
+Please download the processed data and put it in the `./data/split_norm/` folder.
+
+### Original gene expression data
+- `gdsc_rma_raw.csv` was downloaded from https://ibm.ent.box.com/v/paccmann-pytoda-data/folder/91948853171;
+plesse rename 'gdsc_rma_raw.csv' as 'gdsc-rma_gene-expression.csv' and put into `./data/original/` folder.
+- The scRNA-seq data can be downloaded fully at https://drive.google.com/file/d/15smmSqzVf-6et1EAbPj5LWBdLQ1QkVO9/view?usp=share_link. Please unzip the rar file and get five tsv files. Put them into the `./data/original/gene_count_matrix` folder. For convinience, `scrna_ccle_combined.tsv` is a combination of CPM (count per million) for `scrna_ccle_jhu006_exprs.tsv` and `scrna_ccle_scc47_expr.tsv`.
+
+
+
 ## Data Preparation
 
 In accordance with our unified cell embedding extraction method, some data format transformation is needed.

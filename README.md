@@ -10,6 +10,7 @@ This is the official code repository of the paper **Biology-Driven Insights into
 | UCE | http://biorxiv.org/lookup/doi/10.1101/2023.11.28.568918 | https://github.com/snap-stanford/UCE |
 | scFoundation | https://www.nature.com/articles/s41592-024-02305-7 | https://github.com/biomap-research/scFoundation |
 | LangCell | http://arxiv.org/abs/2405.06708 | https://github.com/PharMolix/LangCell |
+| scCello | https://arxiv.org/abs/2408.12373v1 | https://github.com/DeepGraphLearning/scCello |
 
 ## Dependencies
 
@@ -77,80 +78,31 @@ The codes for applying scGPT, Geneformer and LangCell are located in the `scFM-B
 
 
 ## Download data and checkpoints
-Download the datasets and checkpoints of scFMs used in this benchmarking work from [zenodo](https://zenodo.org/records/14795562).
+Download the datasets and checkpoints of scFMs used in this benchmarking work from [zenodo](https://doi.org/10.5281/zenodo.17054467).
 Please unzip `datasets.tar.gz`, `TISCH.tar.gz` and `weights.tar.gz` in the `scFM-Bench/data` directory, which looks like this:
 ```
 ├── datasets
-│   ├── HLCA_core.h5ad
-│   ├── Immune_all_human.h5ad
-│   ├── pancreas_scib.h5ad
-│   └── Tabula_Sapiens_all.h5ad
 ├── TISCH
-│   ├── Blood
-│   │   ├── AEL_GSE142213_CellMetainfo_table.tsv
-│   │   ├── AEL_GSE142213_expression.h5
-│   │   ├── ALL_GSE132509_CellMetainfo_table.tsv
-│   │   ├── ALL_GSE132509_expression.h5
-│   │   ├── AML_GSE116256_CellMetainfo_table.tsv
-│   │   └── AML_GSE116256_expression.h5
-│   ├── Bone
-│   │   ├── MM_GSE117156_CellMetainfo_table.tsv
-│   │   └── MM_GSE117156_expression.h5
-│   ├── Brain
-│   │   ├── Glioma_GSE131928_10X_CellMetainfo_table.tsv
-│   │   ├── Glioma_GSE131928_10X_expression.h5
-│   │   ├── Glioma_GSE138794_CellMetainfo_table.tsv
-│   │   ├── Glioma_GSE138794_expression.h5
-│   │   ├── Glioma_GSE139448_CellMetainfo_table.tsv
-│   │   ├── Glioma_GSE139448_expression.h5
-│   │   ├── Glioma_GSE141982_CellMetainfo_table.tsv
-│   │   ├── Glioma_GSE141982_expression.h5
-│   │   ├── MB_GSE119926_CellMetainfo_table.tsv
-│   │   └── MB_GSE119926_expression.h5
-│   ├── Eye
-│   │   ├── UVM_GSE139829_CellMetainfo_table.tsv
-│   │   └── UVM_GSE139829_expression.h5
-│   └── preprocess_data.ipynb
+│   ├── Blood
+│   ├── Bone
+│   ├── Brain
+│   └── Eye
 └── weights
     ├── Geneformer
-    │   ├── default
-    │   │   ├── 12L
-    │   │   │   ├── config.json
-    │   │   │   ├── pytorch_model.bin
-    │   │   │   └── training_args.bin
-    │   │   └── 6L
-    │   │       ├── config.json
-    │   │       ├── pytorch_model.bin
-    │   │       ├── README.md
-    │   │       └── training_args.bin
-    │   └── dicts
-    │       ├── gene_median_dictionary.pkl
-    │       ├── gene_name_id_dict.pkl
-    │       └── token_dictionary.pkl
+    │   ├── default
+    │   │   ├── 12L
+    │   │   └── 6L
+    │   └── dicts
     ├── LangCell
-    │   ├── cell_bert
-    │   │   ├── config.json
-    │   │   └── pytorch_model.bin
-    │   ├── cell_proj.bin
-    │   ├── config.json
-    │   ├── ctm_head.bin
-    │   ├── text_bert
-    │   │   ├── config.json
-    │   │   └── pytorch_model.bin
-    │   ├── text_proj.bin
-    │   └── tokenizer
-    │       └── BiomedBERT
-    │           ├── tokenizer_config.json
-    │           └── vocab.txt
+    │   ├── cell_bert
+    │   ├── text_bert
+    │   └── tokenizer
+    │       └── BiomedBERT
+    ├── scCello
     ├── scFoundation
-    │   └── models.ckpt
     ├── scgpt
-    │   └── scGPT_human
-    │       ├── args.json
-    │       ├── best_model.pt
-    │       └── vocab.json
+    │   └── scGPT_human
     └── UCE
-        └── 33l_8ep_1024t_1280.torch
 ```
 **Note 1**: The TISCH datasets shoule be firstly processed via running the codes in `data/TISCH/preprocess_data.ipynb`.
 
@@ -222,6 +174,19 @@ The baseline code is from [SequencingCancerFinder](https://github.com/Patchouli-
 ### Drug sensitivity prediction
 The baseline code is from [SCAD](https://github.com/CompBioT/SCAD). See details in the `scFM-Bench/DrugSensitivity` subfolder.
 
+## Tutorials
+We also provided Notebooks to demonstrate how to use the scFMs in downstream tasks.
+
+| Task | Notebook link |
+|--------------|------------|
+| scVI | https://doi.org/10.1038/s41592-018-0229-2 | 
+| Extraction of gene embeddings | https://github.com/wujialu/scFM-Bench/blob/main/notebooks/1_extract_gene_embeddings.ipynb | 
+| Extraction of cell embeddings	| https://github.com/wujialu/scFM-Bench/blob/main/notebooks/2_extract_cell_embeddings.ipynb | 
+| Cell clustering	| https://github.com/wujialu/scFM-Bench/blob/main/notebooks/3_cell_clustering.ipynb | 
+| Attention based GRN analysis	| https://github.com/wujialu/scFM-Bench/blob/main/notebooks/Tutorial_Attention_GRN.ipynb | 
+| Cell type annotation (OnClass)	| https://github.com/wujialu/scFM-Bench/blob/main/OnClass/Tutorial_OnClass.ipynb | 
+| Cancer cell identification (Cancer-Finder)	| https://github.com/wujialu/scFM-Bench/blob/main/SequencingCancerFinder/Tutorial_CancerFinder.ipynb | 
+Drug sensitivity prediction (SCAD)	| https://github.com/wujialu/scFM-Bench/blob/main/DrugSensitivity/Tutorial_DrugSensitivity.ipynb | 
 
 ## Acknowledgments
 Our implementation uses microsoft's
